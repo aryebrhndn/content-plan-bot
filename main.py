@@ -277,8 +277,8 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         target_duration = int(duration_match.group(1)) if duration_match else 12
         target_duration = max(5, min(60, target_duration))
 
-        # Deteksi Aspect Ratio
-        if any(k in lower_prompt for k in ["landscape", "16:9", "horizontal", "lebar", "youtube"]):
+        # Deteksi Aspect Ratio (Mendukung ejaan Inggris & Indonesia: lanskap, lebar, tidur)
+        if any(k in lower_prompt for k in ["lanskap", "landscape", "horizontal", "16:9", "lebar", "tidur", "youtube", "desktop"]):
             aspect_ratio = "landscape"
             ratio_label = "16:9 Landscape"
         elif any(k in lower_prompt for k in ["square", "1:1", "kotak", "feed", "persegi"]):
@@ -315,13 +315,13 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         )
         progress_msg_id = send_telegram_sync(chat_id, init_text)
 
-        # Tahap 2: 35% (Panggil Gemini AI)
+        # Tahap 2: 35% (Panggil Gemini AI / Analisis Konsep)
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
-                f"🤖 *Merancang Konsep Visual & Naskah AI...*\n"
+                f"🤖 *Merancang Konsep Visual & Komposisi...*\n"
                 f"`[{format_progress_bar(35)}]` *35%*\n\n"
-                f"📍 *Status:* Gemini AI sedang menyusun naskah & shot-list scene...\n"
+                f"📍 *Status:* Memproses spesifikasi frame & aset animasi visual...\n"
                 f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
                 f"⏱️ *Durasi Target:* {target_duration} Detik\n"
                 f"🎯 *Topik:* _{user_prompt}_"
@@ -331,15 +331,17 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         brand_badge = script_data.get("brand_badge", "⚡ 3D TECH • HARDWARE VECTOR")
         persona_used = script_data.get("persona_used", resolved_persona)
         actual_duration = script_data.get("duration_sec", target_duration)
+        is_clean_footage = script_data.get("is_clean_footage", False)
 
         # Tahap 3: 55% (Menyiapkan Komposisi Remotion)
+        stage_desc = "Menyiapkan aset 3D hardware & jalur sirkuit..." if is_clean_footage else "Naskah AI siap! Mengompilasi komponen grafis Remotion..."
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
                 f"🎨 *Menyiapkan Komposisi Grafis React...*\n"
                 f"`[{format_progress_bar(55)}]` *55%*\n\n"
-                f"📍 *Status:* Naskah AI siap! Mengompilasi komponen grafis Remotion...\n"
-                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"📍 *Status:* {stage_desc}\n"
+                f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
                 f"⚙️ *Format:* Remotion React ({ratio_label})\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
@@ -351,7 +353,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"🎬 *Merender Frame Video Remotion (60 FPS)...*\n"
                 f"`[{format_progress_bar(75)}]` *75%*\n\n"
                 f"📍 *Status:* Engine Remotion sedang me-render aset visual 3D/vektor...\n"
-                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
                 f"⚙️ *Format:* Remotion React ({ratio_label})\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
@@ -359,14 +361,15 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         from core.remotion_renderer import render_remotion_video, is_remotion_available
         if engine == "remotion" and is_remotion_available():
             render_remotion_video(
-                hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
+                hook_text=script_data.get("hook_header", ""),
                 points=script_data.get("points", []),
-                cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
+                cta_text=script_data.get("cta_footer", ""),
                 output_mp4_path=temp_video,
                 persona_key=persona_used,
                 aspect_ratio=aspect_ratio,
                 brand_badge=brand_badge,
-                duration_sec=actual_duration
+                duration_sec=actual_duration,
+                is_clean_footage=is_clean_footage
             )
         else:
             create_overlay_image(
@@ -385,26 +388,36 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"🚀 *Finalisasi Video & Mengunggah ke Telegram...*\n"
                 f"`[{format_progress_bar(95)}]` *95%*\n\n"
                 f"📍 *Status:* Encoding video MP4 selesai! Sedang mengunggah media...\n"
-                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
 
-        caption_text = (
-            f"✅ *Video Animasi Siap Diposting!*\n"
-            f"🏷️ Kategori: *{brand_badge}*\n"
-            f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*\n\n"
-            f"📝 *Salin Teks Caption Ini:*\n\n"
-            f"{script_data.get('caption', '')}"
-        )
+        if is_clean_footage:
+            caption_text = (
+                f"🎬 *Footage Animasi Remotion Siap!* (Clean B-Roll)\n"
+                f"📐 Format: *{ratio_label}* (1920x1080)\n"
+                f"⏱️ Durasi: *{actual_duration} Detik* (30 FPS)\n"
+                f"🎨 Tipe: *3D Hardware RAM & CPU Vector Animation*\n\n"
+                f"💡 _Visual murni tanpa kartu teks / watermark, siap digunakan untuk B-roll & Microstock._"
+            )
+        else:
+            caption_text = (
+                f"✅ *Video Animasi Siap Diposting!*\n"
+                f"🏷️ Kategori: *{brand_badge}*\n"
+                f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*\n\n"
+                f"📝 *Salin Teks Caption Ini:*\n\n"
+                f"{script_data.get('caption', '')}"
+            )
         send_telegram_video_sync(chat_id, temp_video, caption_text)
 
         # Tahap 6: 100% (Selesai!)
         if progress_msg_id:
+            status_done = "Footage Video MP4 Siap Digunakan (100%)!" if is_clean_footage else "Video Selesai Dibuat (100%)!"
             edit_telegram_sync(
                 chat_id, progress_msg_id,
-                f"✅ *Video Selesai Dibuat (100%)!*\n"
+                f"✅ *{status_done}*\n"
                 f"`[{format_progress_bar(100)}]` *100%*\n\n"
-                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
                 f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik\n"
                 f"📁 *File video telah dikirimkan di bawah 👇*"
@@ -467,13 +480,56 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         parts = text_clean.split(maxsplit=1)
         if len(parts) > 1:
             topic = parts[1].strip()
-            background_tasks.add_task(process_video_generation, chat_id, topic, "auto", "remotion")
+            background_tasks.add_task(process_video_generation, chat_id, topic, "tech_vector", "remotion")
         else:
             await send_telegram_message(
                 chat_id,
                 "🎬 *Remotion Video Generator (React & TypeScript)*\n\n"
                 "Silakan masukkan topik video setelah command.\n"
-                "Contoh: `/remotion 8 detik footage ram animasi 3d vektor`"
+                "Contoh: `/remotion 8 detik footage ram animasi 3d vektor lanskap`"
+            )
+        return
+
+    # Perintah /veo <topik> (Google Veo 3.1 Video AI Engine)
+    if text_clean.startswith(("/veo", "/video_ai")):
+        parts = text_clean.split(maxsplit=1)
+        if len(parts) > 1:
+            topic = parts[1].strip()
+            background_tasks.add_task(process_video_generation, chat_id, topic, "tech_vector", "remotion")
+        else:
+            await send_telegram_message(
+                chat_id,
+                "🎬 *Google Veo 3.1 AI Video*\n\n"
+                "Masukkan prompt video. Contoh:\n"
+                "`/veo 8 detik footage ram animasi 3d vektor lanskap`"
+            )
+        return
+
+    # Perintah /haji <topik> (Edukasi Haji Dari Muda)
+    if text_clean.startswith("/haji"):
+        parts = text_clean.split(maxsplit=1)
+        if len(parts) > 1:
+            topic = parts[1].strip()
+            background_tasks.add_task(process_video_generation, chat_id, topic, "hajidarimuda", "remotion")
+        else:
+            await send_telegram_message(
+                chat_id,
+                "🕋 *Haji Dari Muda Reels Generator*\n\n"
+                "Masukkan topik. Contoh: `/haji 5 Tips Istithaah Usia Muda`"
+            )
+        return
+
+    # Perintah /arye <topik> (Arye Burhanudin Deep Dive Tech)
+    if text_clean.startswith("/arye"):
+        parts = text_clean.split(maxsplit=1)
+        if len(parts) > 1:
+            topic = parts[1].strip()
+            background_tasks.add_task(process_video_generation, chat_id, topic, "arye", "remotion")
+        else:
+            await send_telegram_message(
+                chat_id,
+                "🎙️ *Arye Burhanudin Tech Breakdown*\n\n"
+                "Masukkan topik. Contoh: `/arye Bedah Arsitektur Microservices`"
             )
         return
 
@@ -618,16 +674,31 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
 
         # Tampilkan opsi persona
         modes_text = (
-            f"• `/mode hajidarimuda` ➔ Haji Dari Muda (Edukasi Haji/Umrah, Teman Jalan)\n"
-            f"• `/mode arye` ➔ Arye Burhanudin (EdTech, Vox Paper-Cutout, Deep Dive)"
+            f"1️⃣ `/mode haji` ➔ *Haji Dari Muda*\n"
+            f"   • Konten edukasi Haji/Umrah (Teman Jalan, Hadits/Doa, Naskah + Caption IG)\n\n"
+            f"2️⃣ `/mode arye` ➔ *Arye Burhanudin*\n"
+            f"   • Deep dive edutech & sistem (Vox Cutout, arsitektur, naskah H-C-B-C)\n\n"
+            f"3️⃣ `/mode remotion` ➔ *Remotion Motion Graphics*\n"
+            f"   • Animasi grafis/hardware (Footage B-Roll bersih / Infografis, 16:9 Lanskap, 1:1, 9:16)\n\n"
+            f"4️⃣ `/mode veo` ➔ *Google Veo 3.1 AI Video*\n"
+            f"   • Generative Cinematic AI Video dari prompt teks"
         )
         await send_telegram_message(
             chat_id,
-            f"🔄 *Pilih Brand Acuan:*\n\n"
+            f"🔄 *Pilih Mode Kerja Bot:*\n\n"
             f"{modes_text}\n\n"
-            f"Contoh: Ketik `/mode arye` untuk akun pribadi kamu."
+            f"💡 _Contoh: Ketik `/mode remotion` untuk fokus bikin footage animasi grafis._"
         )
         return
+
+    # Ambil mode aktif pengguna (default: remotion agar tidak memaksakan brand haji)
+    user_curr_mode = user_active_modes.get(user_id, "remotion")
+    if user_curr_mode in ["haji", "hajidarimuda"]:
+        default_persona = "hajidarimuda"
+    elif user_curr_mode in ["arye", "personal"]:
+        default_persona = "arye"
+    else:
+        default_persona = "tech_vector"
 
     # 1. Deteksi Permintaan Video Animasi (Natural Language tanpa harus tag /remotion)
     video_triggers = [
@@ -644,7 +715,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
     )
 
     if is_video_request:
-        background_tasks.add_task(process_video_generation, chat_id, text_clean, "auto", "remotion")
+        background_tasks.add_task(process_video_generation, chat_id, text_clean, default_persona, "remotion")
         return
 
     # 2. Deteksi Permintaan Ide / Brainstorming
@@ -707,7 +778,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         return
 
     # 4. Default / Pembuatan Video Animasi (Jika input teks biasa/topik langsung)
-    background_tasks.add_task(process_video_generation, chat_id, text_clean, "auto", "remotion")
+    background_tasks.add_task(process_video_generation, chat_id, text_clean, default_persona, "remotion")
 
 
 @app.get("/")

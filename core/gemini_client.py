@@ -20,7 +20,7 @@ PERSONAS = {
     "hajidarimuda": {
         "name": "Haji Dari Muda",
         "guide_file": "hajidarimuda_style_guide.md",
-        "description": "Edukasi haji & umrah untuk anak muda ('Teman Jalan', zero hard-selling, data riil)",
+        "description": "Edukasi haji & umrah ('Teman Jalan', naskah hook-poin-CTA, hadits & caption IG)",
         "theme_colors": {
             "top_box": "#DC2626",      # Merah Brand
             "bot_box": "#DC2626",      # Merah Brand
@@ -33,7 +33,7 @@ PERSONAS = {
     "arye": {
         "name": "Arye Burhanudin",
         "guide_file": "arye-burhanudin.md",
-        "description": "EdTech, UI/UX, Investigasi & Bedah Kasus (Ala Vox, Paper-Cutout, H-C-B-C)",
+        "description": "EdTech & Deep Dive Tech (Ala Vox Paper-Cutout, framework H-C-B-C)",
         "theme_colors": {
             "top_box": "#001A4D",      # Deep Newsprint Ink
             "bot_box": "#E63946",      # Stamp Red
@@ -42,10 +42,39 @@ PERSONAS = {
             "text_mid": "#1A1A1A",
             "text_bot": "#FFFFFF"
         }
+    },
+    "remotion": {
+        "name": "Remotion Motion Graphics",
+        "guide_file": "remotion/TechVectorReels.tsx",
+        "description": "Motion Graphics & 3D Vector Hardware (Footage B-Roll bersih / Infografis, 16:9 Lanskap, 1:1, 9:16)",
+        "theme_colors": {
+            "top_box": "#0A0F1D",
+            "bot_box": "#00F0FF",
+            "mid_box": "#0F172A",
+            "text_top": "#00F0FF",
+            "text_mid": "#FFFFFF",
+            "text_bot": "#000000"
+        }
+    },
+    "veo": {
+        "name": "Google Veo 3.1 AI Video",
+        "guide_file": "Google Veo 3.1 Fast Preview",
+        "description": "Generative Cinematic AI Video (Video MP4 fotorealistis / 3D render dari prompt teks)",
+        "theme_colors": {
+            "top_box": "#1E1B4B",
+            "bot_box": "#7C3AED",
+            "mid_box": "#0F172A",
+            "text_top": "#C084FC",
+            "text_mid": "#FFFFFF",
+            "text_bot": "#FFFFFF"
+        }
     }
 }
-# Alias personal -> arye
+# Aliases
+PERSONAS["haji"] = PERSONAS["hajidarimuda"]
 PERSONAS["personal"] = PERSONAS["arye"]
+PERSONAS["vector"] = PERSONAS["remotion"]
+PERSONAS["tech"] = PERSONAS["remotion"]
 
 
 def load_style_guide(persona_key: str) -> str:
@@ -167,6 +196,30 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
     target_duration = int(duration_match.group(1)) if duration_match else 12
     # Batasi durasi wajar antara 5 s.d. 60 detik
     target_duration = max(5, min(60, target_duration))
+
+    # Deteksi apakah permintaan adalah B-Roll / Clean Footage (tanpa teks / infografis)
+    is_clean_footage = any(k in lower_prompt for k in [
+        "footage", "b-roll", "broll", "tanpa teks", "no text", "clean",
+        "animasi saja", "vektor saja", "gambar saja", "hanya animasi",
+        "microstock", "video stock", "background", "loop"
+    ]) and not any(k in lower_prompt for k in ["reels", "tips", "edukasi", "penjelasan", "hadits"])
+
+    if is_clean_footage:
+        return {
+            "hook_header": "",
+            "points": [],
+            "cta_footer": "",
+            "brand_badge": "⚡ 3D HARDWARE • CLEAN FOOTAGE",
+            "duration_sec": target_duration,
+            "is_clean_footage": True,
+            "persona_used": "tech_vector",
+            "caption": (
+                f"🎬 *Footage Animasi Remotion Siap!*\n"
+                f"⏱️ Durasi: *{target_duration} Detik* (30 FPS)\n"
+                f"🎨 Tipe: *3D Hardware RAM & CPU Vector Animation*\n"
+                f"💡 _Visual murni tanpa kartu teks / watermark, siap digunakan untuk B-roll & Microstock._"
+            )
+        }
 
     # Deteksi apakah topik adalah tentang Tech/Hardware/3D/General vs Haji
     is_haji_related = any(k in lower_prompt for k in [

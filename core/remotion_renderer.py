@@ -24,16 +24,17 @@ def render_remotion_video(
     aspect_ratio: str = "portrait",
     brand_badge: str = "",
     duration_sec: int = 12,
+    is_clean_footage: bool = False,
     timeout: int = 150
 ) -> str:
     """
     Merender video animasi menggunakan Remotion (React & TypeScript).
-    Mendukung kustomisasi rasio dan durasi:
+    Mendukung kustomisasi rasio, durasi, dan Clean Footage Mode (B-roll murni tanpa kartu teks):
     - portrait (9:16 - 1080x1920) untuk Reels/Shorts/TikTok
-    - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Presentasi
+    - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Footage
     - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
     """
-    if persona_key in ["tech_vector", "tech", "hardware", "vector", "3d"]:
+    if persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
         base_comp = "TechVectorReels"
     elif persona_key == "arye":
         base_comp = "AryeReels"
@@ -41,9 +42,9 @@ def render_remotion_video(
         base_comp = "HajiReels"
     
     aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
-    if aspect_ratio_clean in ["landscape", "16:9", "horizontal", "youtube"]:
+    if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
         comp_id = f"{base_comp}Landscape"
-    elif aspect_ratio_clean in ["square", "1:1", "kotak", "feed"]:
+    elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
         comp_id = f"{base_comp}Square"
     else:
         comp_id = base_comp
@@ -58,7 +59,8 @@ def render_remotion_video(
         "points": points if points else ["Edukasi dan riset mendalam", "Data riil dan terverifikasi"],
         "cta_footer": cta_text,
         "brand_badge": brand_badge,
-        "duration_sec": duration_sec
+        "duration_sec": duration_sec,
+        "is_clean_footage": is_clean_footage
     }
 
     with open(props_json_path, "w", encoding="utf-8") as f:

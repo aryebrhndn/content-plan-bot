@@ -13,13 +13,15 @@ export interface TechVectorReelsProps {
   cta_footer: string;
   brand_badge?: string;
   duration_sec?: number;
+  is_clean_footage?: boolean;
 }
 
 export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
   hook_header,
   points = [],
   cta_footer,
-  brand_badge
+  brand_badge,
+  is_clean_footage = false
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -36,97 +38,178 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
   const headerTranslateY = interpolate(headerSpring, [0, 1], [-80, 0]);
   const headerOpacity = interpolate(headerSpring, [0, 1], [0, 1]);
 
-  // Efek Pulse Neon & Circuit Data Pulse
+  // Efek Animasi Sirkuit & Pulse Neon
   const pulse = Math.sin(frame / 8) * 0.05 + 1;
   const circuitPulse = (Math.sin(frame / 6) + 1) / 2;
   const glowIntensity = interpolate(Math.sin(frame / 10), [-1, 1], [15, 35]);
+  const rgbHue = (frame * 4) % 360;
+  const rgbColor = `hsl(${rgbHue}, 90%, 60%)`;
+  const rgbColorAlt = `hsl(${(rgbHue + 60) % 360}, 90%, 60%)`;
 
   // Badge Default
   const displayBadge = brand_badge || '⚡ 3D TECH • HARDWARE VECTOR';
 
-  // SVG Animasi Vektor CPU / RAM
-  const renderHardwareSvg = (size: number = 180) => {
+  // =========================================================================
+  // RENDER PURE HARDWARE 3D/VECTOR (CPU & DUAL RAM MODULES DENGAN DATA BUS)
+  // =========================================================================
+  const renderPureHardwareGraphic = (scale: number = 1.0) => {
     return (
       <svg
-        width={size}
-        height={size}
-        viewBox="0 0 200 200"
+        width={700 * scale}
+        height={420 * scale}
+        viewBox="0 0 700 420"
         fill="none"
         xmlns="http://www.w3.org/2000/svg"
         style={{
-          filter: `drop-shadow(0 0 ${glowIntensity}px rgba(0, 240, 255, 0.6))`,
-          transform: `scale(${pulse})`
+          filter: `drop-shadow(0 0 ${glowIntensity}px rgba(0, 240, 255, 0.45))`
         }}
       >
-        {/* Circuit Tracks */}
-        <path
-          d="M20 50 H60 V90 H30 M140 30 V70 H170 M40 160 H80 V130 M150 170 H120 V120"
-          stroke="#00F0FF"
-          strokeWidth="3"
-          strokeDasharray="6 6"
-          strokeOpacity={0.4 + circuitPulse * 0.5}
-        />
-        {/* CPU Outer Die */}
-        <rect
-          x="60"
-          y="60"
-          width="80"
-          height="80"
-          rx="12"
-          fill="#0D1322"
-          stroke="#00F0FF"
-          strokeWidth="4"
-        />
-        {/* CPU Silicon Core (3D Vector Effect) */}
-        <rect
-          x="75"
-          y="75"
-          width="50"
-          height="50"
-          rx="6"
-          fill="url(#coreGradient)"
-          stroke="#7928CA"
-          strokeWidth="2"
-        />
-        {/* RAM Stick Silhouette / Memory Bus */}
-        <rect x="35" y="95" width="10" height="10" rx="2" fill="#00F0FF" opacity={circuitPulse} />
-        <rect x="155" y="95" width="10" height="10" rx="2" fill="#7928CA" opacity={1 - circuitPulse} />
-        <rect x="95" y="35" width="10" height="10" rx="2" fill="#00F0FF" opacity={1 - circuitPulse} />
-        <rect x="95" y="155" width="10" height="10" rx="2" fill="#7928CA" opacity={circuitPulse} />
-
-        {/* CPU Pin Dots */}
-        <circle cx="70" cy="70" r="3" fill="#00F0FF" />
-        <circle cx="130" cy="70" r="3" fill="#00F0FF" />
-        <circle cx="70" cy="130" r="3" fill="#00F0FF" />
-        <circle cx="130" cy="130" r="3" fill="#00F0FF" />
-
-        {/* Core Text Label */}
-        <text
-          x="100"
-          y="105"
-          fill="#FFFFFF"
-          fontSize="11"
-          fontWeight="bold"
-          fontFamily="monospace"
-          textAnchor="middle"
-        >
-          CPU/RAM
-        </text>
-
+        {/* Motherboard Grid Lines */}
         <defs>
-          <linearGradient id="coreGradient" x1="75" y1="75" x2="125" y2="125" gradientUnits="userSpaceOnUse">
-            <stop stopColor="#00F0FF" />
-            <stop offset="1" stopColor="#7928CA" />
+          <pattern id="grid" width="30" height="30" patternUnits="userSpaceOnUse">
+            <path d="M 30 0 L 0 0 0 30" fill="none" stroke="rgba(0, 240, 255, 0.08)" strokeWidth="1" />
+          </pattern>
+          <linearGradient id="rgbBar1" x1="0" y1="0" x2="1" y2="0">
+            <stop offset="0%" stopColor={rgbColor} />
+            <stop offset="100%" stopColor={rgbColorAlt} />
+          </linearGradient>
+          <linearGradient id="cpuCoreGrad" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stopColor="#00F0FF" />
+            <stop offset="50%" stopColor="#7928CA" />
+            <stop offset="100%" stopColor="#00DFD8" />
           </linearGradient>
         </defs>
+
+        <rect width="700" height="420" fill="url(#grid)" />
+
+        {/* Bus Jalur Data dari RAM ke CPU */}
+        <g stroke="#00F0FF" strokeWidth="2.5" strokeDasharray="8 6" strokeDashoffset={-frame * 3}>
+          <path d="M 190 120 H 330 V 210 H 370" opacity="0.8" />
+          <path d="M 190 160 H 310 V 210 H 370" opacity="0.6" />
+          <path d="M 190 260 H 310 V 210 H 370" opacity="0.6" />
+          <path d="M 190 300 H 330 V 210 H 370" opacity="0.8" />
+        </g>
+
+        {/* ================= RAM STICK 1 (DDR5) ================= */}
+        <g transform="translate(60, 90)">
+          {/* PCB */}
+          <rect x="0" y="0" width="130" height="70" rx="8" fill="#0A0F1D" stroke="#00F0FF" strokeWidth="2.5" />
+          {/* RGB Lightbar di atas */}
+          <rect x="5" y="4" width="120" height="8" rx="4" fill="url(#rgbBar1)" filter={`drop-shadow(0 0 8px ${rgbColor})`} />
+          {/* Heat Spreader Textures */}
+          <rect x="10" y="18" width="110" height="34" rx="4" fill="#111B30" stroke="#00F0FF" strokeWidth="1" />
+          {/* Memory Chips */}
+          <rect x="18" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="44" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="70" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="96" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          {/* Gold Pin Contacts */}
+          <path d="M 10 60 H 120" stroke="#FFE600" strokeWidth="4" strokeDasharray="3 2" />
+          <text x="65" y="38" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+            DDR5 6400MHz
+          </text>
+        </g>
+
+        {/* ================= RAM STICK 2 (DDR5) ================= */}
+        <g transform="translate(60, 240)">
+          {/* PCB */}
+          <rect x="0" y="0" width="130" height="70" rx="8" fill="#0A0F1D" stroke="#00F0FF" strokeWidth="2.5" />
+          {/* RGB Lightbar di atas */}
+          <rect x="5" y="4" width="120" height="8" rx="4" fill="url(#rgbBar1)" filter={`drop-shadow(0 0 8px ${rgbColorAlt})`} />
+          {/* Heat Spreader Textures */}
+          <rect x="10" y="18" width="110" height="34" rx="4" fill="#111B30" stroke="#00F0FF" strokeWidth="1" />
+          {/* Memory Chips */}
+          <rect x="18" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="44" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="70" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          <rect x="96" y="24" width="20" height="22" rx="2" fill="#000000" stroke="#7928CA" strokeWidth="1" />
+          {/* Gold Pin Contacts */}
+          <path d="M 10 60 H 120" stroke="#FFE600" strokeWidth="4" strokeDasharray="3 2" />
+          <text x="65" y="38" fill="#FFFFFF" fontSize="8" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+            CHANNEL B
+          </text>
+        </g>
+
+        {/* ================= CPU SOCKET & SILICON DIE ================= */}
+        <g transform="translate(370, 130)">
+          {/* Outer Socket Plate */}
+          <rect x="0" y="0" width="160" height="160" rx="18" fill="#080D1A" stroke="#00F0FF" strokeWidth="3" />
+          {/* Heatspreader Die */}
+          <rect x="20" y="20" width="120" height="120" rx="12" fill="#0F172A" stroke="#7928CA" strokeWidth="2" />
+          {/* Silicon Core */}
+          <rect
+            x="45"
+            y="45"
+            width="70"
+            height="70"
+            rx="8"
+            fill="url(#cpuCoreGrad)"
+            opacity={0.85 + circuitPulse * 0.15}
+            filter="drop-shadow(0 0 12px rgba(0, 240, 255, 0.7))"
+          />
+          {/* CPU Socket Pins Indicator */}
+          <circle cx="28" cy="28" r="4" fill="#FFE600" />
+          <circle cx="132" cy="28" r="4" fill="#FFE600" />
+          <circle cx="28" cy="132" r="4" fill="#FFE600" />
+          <circle cx="132" cy="132" r="4" fill="#FFE600" />
+          {/* Text Core */}
+          <text x="80" y="78" fill="#FFFFFF" fontSize="13" fontWeight="900" fontFamily="sans-serif" textAnchor="middle">
+            ULTRA CPU
+          </text>
+          <text x="80" y="96" fill="#00F0FF" fontSize="10" fontWeight="bold" fontFamily="monospace" textAnchor="middle">
+            L3 CACHE
+          </text>
+        </g>
+
+        {/* Jalur Eksternal Bus PCIe / GPU */}
+        <g stroke="#7928CA" strokeWidth="2" strokeDasharray="6 6" strokeDashoffset={frame * 2.5}>
+          <path d="M 530 210 H 640 V 100" opacity="0.7" />
+          <path d="M 530 210 H 640 V 320" opacity="0.7" />
+        </g>
       </svg>
     );
   };
 
+  // =========================================================================
+  // JIKA MODE CLEAN FOOTAGE DIMINTA (TANPA TEKS, TANPA KARTU, TANPA CAPTION)
+  // =========================================================================
+  if (is_clean_footage) {
+    const cameraZoom = interpolate(frame, [0, fps * 15], [1, 1.08]);
+    const cameraRotate = interpolate(frame, [0, fps * 15], [0, 1.5]);
+
+    return (
+      <AbsoluteFill
+        style={{
+          background: 'radial-gradient(ellipse at center, #0B132B 0%, #030611 100%)',
+          display: 'flex',
+          alignItems: 'center',
+          justifyContent: 'center',
+          overflow: 'hidden'
+        }}
+      >
+        {/* Latar Belakang Garis Sirkuit Ambient */}
+        <div
+          style={{
+            transform: `scale(${cameraZoom}) rotate(${cameraRotate}deg)`,
+            transition: 'transform 0.1s linear',
+            display: 'flex',
+            alignItems: 'center',
+            justifyContent: 'center',
+            width: '100%',
+            height: '100%'
+          }}
+        >
+          {isLandscape ? renderPureHardwareGraphic(1.5) : renderPureHardwareGraphic(isSquare ? 1.2 : 1.1)}
+        </div>
+      </AbsoluteFill>
+    );
+  }
+
+  // =========================================================================
+  // MODE INFOGRAFIS (DENGAN KARTU TEKS EDUKASI)
+  // =========================================================================
   if (isLandscape) {
-    // ==========================================
     // 16:9 LANDSCAPE (YOUTUBE / DESKTOP)
-    // ==========================================
     return (
       <AbsoluteFill
         style={{
@@ -185,7 +268,7 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
           </div>
 
           <div style={{ display: 'flex', alignItems: 'center', gap: 30 }}>
-            {renderHardwareSvg(130)}
+            {renderPureHardwareGraphic(0.4)}
             <div
               style={{
                 background: 'linear-gradient(90deg, #00F0FF 0%, #7928CA 100%)',
@@ -258,9 +341,7 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
   }
 
   if (isSquare) {
-    // ==========================================
     // 1:1 SQUARE (INSTAGRAM FEED)
-    // ==========================================
     return (
       <AbsoluteFill
         style={{
@@ -311,7 +392,7 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
         </div>
 
         <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'center', margin: '15px 0' }}>
-          {renderHardwareSvg(120)}
+          {renderPureHardwareGraphic(0.5)}
         </div>
 
         <div style={{ width: '100%', display: 'flex', flexDirection: 'column', gap: 14 }}>
@@ -361,9 +442,7 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
     );
   }
 
-  // ==========================================
   // 9:16 PORTRAIT (REELS / SHORTS / TIKTOK)
-  // ==========================================
   return (
     <AbsoluteFill
       style={{
@@ -417,7 +496,7 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
 
       {/* Bagian Tengah: Animasi Hardware 3D Vector */}
       <div style={{ margin: '20px 0' }}>
-        {renderHardwareSvg(200)}
+        {renderPureHardwareGraphic(0.6)}
       </div>
 
       {/* Bagian Bawah: Poin-Poin Staggered */}
