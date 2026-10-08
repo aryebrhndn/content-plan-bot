@@ -9,8 +9,10 @@ logger = logging.getLogger(__name__)
 
 
 def is_remotion_available() -> bool:
-    """Mengecek apakah Node.js dan npx/remotion tersedia di lingkungan ini."""
-    return shutil.which("npx") is not None or shutil.which("npm") is not None
+    """Mengecek apakah paket Remotion terpasang di node_modules."""
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    cli_dir = os.path.join(base_dir, "node_modules", "@remotion", "cli")
+    return os.path.exists(cli_dir)
 
 
 def render_remotion_video(
@@ -19,13 +21,33 @@ def render_remotion_video(
     cta_text: str,
     output_mp4_path: str,
     persona_key: str = "hajidarimuda",
+    aspect_ratio: str = "portrait",
+    brand_badge: str = "",
+    duration_sec: int = 12,
     timeout: int = 150
 ) -> str:
     """
-    Merender video animasi vertikal 9:16 menggunakan framework Remotion (React & TypeScript).
-    Dijalankan secara headless di Hugging Face Spaces maupun lingkungan lokal.
+    Merender video animasi menggunakan Remotion (React & TypeScript).
+    Mendukung kustomisasi rasio dan durasi:
+    - portrait (9:16 - 1080x1920) untuk Reels/Shorts/TikTok
+    - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Presentasi
+    - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
     """
-    comp_id = "AryeReels" if persona_key == "arye" else "HajiReels"
+    if persona_key in ["tech_vector", "tech", "hardware", "vector", "3d"]:
+        base_comp = "TechVectorReels"
+    elif persona_key == "arye":
+        base_comp = "AryeReels"
+    else:
+        base_comp = "HajiReels"
+    
+    aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
+    if aspect_ratio_clean in ["landscape", "16:9", "horizontal", "youtube"]:
+        comp_id = f"{base_comp}Landscape"
+    elif aspect_ratio_clean in ["square", "1:1", "kotak", "feed"]:
+        comp_id = f"{base_comp}Square"
+    else:
+        comp_id = base_comp
+
     task_id = uuid.uuid4().hex[:8]
     temp_dir = os.path.dirname(os.path.abspath(output_mp4_path))
     os.makedirs(temp_dir, exist_ok=True)
@@ -34,7 +56,9 @@ def render_remotion_video(
     props_data = {
         "hook_header": hook_text,
         "points": points if points else ["Edukasi dan riset mendalam", "Data riil dan terverifikasi"],
-        "cta_footer": cta_text
+        "cta_footer": cta_text,
+        "brand_badge": brand_badge,
+        "duration_sec": duration_sec
     }
 
     with open(props_json_path, "w", encoding="utf-8") as f:
@@ -43,23 +67,24 @@ def render_remotion_video(
     entry_point = "remotion/index.ts"
     npx_bin = shutil.which("npx") or "npx"
 
+    total_frames = max(90, min(1800, int((duration_sec or 12) * 30)))
     cmd = [
         npx_bin,
+        "--no-install",
         "remotion",
         "render",
         entry_point,
         comp_id,
         output_mp4_path,
         f"--props={props_json_path}",
+        f"--frames=0-{total_frames - 1}",
         "--gl=angle",
-        "--chromium-options=--no-sandbox --disable-setuid-sandbox --disable-dev-shm-usage --disable-gpu",
         "--log=info"
     ]
 
     logger.info(f"🚀 Memulai render Remotion [{comp_id}] ke: {output_mp4_path}")
     
     try:
-        # Gunakan shell=True di Windows agar npx.cmd terbaca dengan lancar
         is_windows = os.name == "nt"
         res = subprocess.run(
             cmd if not is_windows else " ".join(f'"{c}"' if " " in c else c for c in cmd),

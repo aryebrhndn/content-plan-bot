@@ -4,7 +4,7 @@ import uuid
 import asyncio
 import logging
 import datetime
-from typing import Dict, List
+from typing import Dict, List, Optional
 from fastapi import FastAPI, Request, BackgroundTasks
 import httpx
 
@@ -125,118 +125,299 @@ def format_laptop_status() -> str:
         )
 
 
+def chunk_text(text: str, max_size: int = 3800) -> list[str]:
+    """Memecah teks panjang menjadi beberapa bagian agar tidak melebihi batas 4096 karakter Telegram."""
+    if len(text) <= max_size:
+        return [text]
+
+    chunks = []
+    lines = text.split("\n")
+    current_chunk = ""
+    for line in lines:
+        if len(current_chunk) + len(line) + 1 > max_size:
+            if current_chunk.strip():
+                chunks.append(current_chunk.strip())
+                current_chunk = ""
+            while len(line) > max_size:
+                chunks.append(line[:max_size])
+                line = line[max_size:]
+        current_chunk += line + "\n"
+
+    if current_chunk.strip():
+        chunks.append(current_chunk.strip())
+    return chunks or [text]
+
+
 async def send_telegram_message(chat_id: int, text: str, reply_markup: dict = None):
-    """Mengirim pesan teks ke Telegram."""
-    if not TELEGRAM_BOT_TOKEN:
-        logger.warning("TELEGRAM_BOT_TOKEN belum diset.")
+    """Mengirim pesan teks ke Telegram dengan pemecahan otomatis (auto-chunk) dan fallback aman."""
+    if not TELEGRAM_BOT_TOKEN or not text:
         return
 
-    payload = {
-        "chat_id": chat_id,
-        "text": text,
-        "parse_mode": "Markdown"
-    }
-    if reply_markup:
-        payload["reply_markup"] = reply_markup
+    chunks = chunk_text(text, max_size=3800)
 
     async with httpx.AsyncClient(timeout=30.0) as client:
-        try:
-            await client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
-        except Exception as e:
-            logger.error(f"Gagal mengirim pesan Telegram: {e}")
+        for chunk in chunks:
+            payload = {
+                "chat_id": chat_id,
+                "text": chunk,
+                "parse_mode": "Markdown"
+            }
+            if reply_markup and chunk == chunks[-1]:
+                payload["reply_markup"] = reply_markup
+
+            try:
+                res = await client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
+                # Jika Telegram menolak (400) karena entity Markdown parsing error atau broken tag:
+                if res.status_code != 200:
+                    logger.warning(f"Telegram parse_mode Markdown gagal ({res.status_code}). Mengirim ulang sebagai plain text...")
+                    payload.pop("parse_mode", None)
+                    res_fallback = await client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
+                    if res_fallback.status_code != 200:
+                        logger.error(f"Gagal mengirim fallback Telegram: {res_fallback.text}")
+            except Exception as e:
+                logger.error(f"Gagal mengirim pesan Telegram: {e}")
 
 
-async def send_telegram_video(chat_id: int, video_path: str, caption: str):
-    """Mengirim file video ke Telegram."""
+def format_progress_bar(percent: int) -> str:
+    """Format visual progress bar 10 block."""
+    total_blocks = 10
+    filled = max(0, min(total_blocks, int(total_blocks * (percent / 100))))
+    empty = total_blocks - filled
+    return "█" * filled + "░" * empty
+
+
+def send_telegram_sync(chat_id: int, text: str) -> Optional[int]:
+    """Mengirim pesan teks secara sinkron (untuk worker background render) & return message_id."""
+    if not TELEGRAM_BOT_TOKEN or not text:
+        return None
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            payload = {
+                "chat_id": chat_id,
+                "text": text,
+                "parse_mode": "Markdown"
+            }
+            res = client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
+            if res.status_code != 200:
+                payload.pop("parse_mode", None)
+                res = client.post(f"{TELEGRAM_API_URL}/sendMessage", json=payload)
+            if res.status_code == 200:
+                return res.json().get("result", {}).get("message_id")
+    except Exception as e:
+        logger.error(f"Gagal send_telegram_sync: {e}")
+    return None
+
+
+def edit_telegram_sync(chat_id: int, message_id: int, text: str):
+    """Mengedit pesan teks secara sinkron untuk update live progress bar."""
+    if not TELEGRAM_BOT_TOKEN or not message_id or not text:
+        return
+    try:
+        with httpx.Client(timeout=25.0) as client:
+            payload = {
+                "chat_id": chat_id,
+                "message_id": message_id,
+                "text": text,
+                "parse_mode": "Markdown"
+            }
+            res = client.post(f"{TELEGRAM_API_URL}/editMessageText", json=payload)
+            if res.status_code != 200:
+                payload.pop("parse_mode", None)
+                client.post(f"{TELEGRAM_API_URL}/editMessageText", json=payload)
+    except Exception as e:
+        logger.warning(f"Gagal edit_telegram_sync: {e}")
+
+
+def send_telegram_video_sync(chat_id: int, video_path: str, caption: str):
+    """Mengirim video secara sinkron untuk worker background render."""
     if not TELEGRAM_BOT_TOKEN:
         return
-
-    async with httpx.AsyncClient(timeout=180.0) as client:
-        try:
+    try:
+        with httpx.Client(timeout=180.0) as client:
             with open(video_path, "rb") as f:
                 files = {"video": (os.path.basename(video_path), f, "video/mp4")}
                 data = {
                     "chat_id": chat_id,
-                    "caption": caption[:1024],  # Limit caption video Telegram
+                    "caption": caption[:1024],
                     "parse_mode": "Markdown"
                 }
-                res = await client.post(f"{TELEGRAM_API_URL}/sendVideo", files=files, data=data)
-                
-                # Jika caption terlalu panjang, kirim sisa teksnya sebagai pesan terpisah
+                res = client.post(f"{TELEGRAM_API_URL}/sendVideo", files=files, data=data)
+                if res.status_code != 200:
+                    data.pop("parse_mode", None)
+                    res = client.post(f"{TELEGRAM_API_URL}/sendVideo", files=files, data=data)
                 if len(caption) > 1024:
-                    await send_telegram_message(chat_id, caption)
-        except Exception as e:
-            logger.error(f"Gagal mengirim video Telegram: {e}")
-            await send_telegram_message(chat_id, f"❌ Gagal mengirim video: {str(e)}")
+                    send_telegram_sync(chat_id, caption)
+    except Exception as e:
+        logger.error(f"Gagal send_telegram_video_sync: {e}")
+        send_telegram_sync(chat_id, f"❌ Gagal mengirim video: {str(e)}")
 
 
-def process_video_generation(chat_id: int, user_prompt: str, persona_key: str, engine: str = "moviepy"):
-    """Proses pembuatan naskah AI, grafis, dan render video di latar belakang (MoviePy atau Remotion)."""
+async def send_telegram_video(chat_id: int, video_path: str, caption: str):
+    """Mengirim file video ke Telegram secara async."""
+    send_telegram_video_sync(chat_id, video_path, caption)
+
+
+def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = "auto", engine: str = "remotion"):
+    """
+    Proses pembuatan video otomatis dengan live percentage progress bar di Telegram.
+    Mendukung Remotion React 60 FPS, kustomisasi durasi (contoh: 8 detik),
+    rasio (16:9, 1:1, 9:16), dan deteksi topik fleksibel tanpa kaku memaksakan brand.
+    """
+    import re
     task_id = uuid.uuid4().hex[:8]
     temp_overlay = os.path.join(TEMP_DIR, f"overlay_{task_id}.png")
-    temp_video = os.path.join(TEMP_DIR, f"reels_{task_id}.mp4")
+    temp_video = os.path.join(TEMP_DIR, f"video_{task_id}.mp4")
+    progress_msg_id = None
 
     try:
-        persona_name = PERSONAS.get(persona_key, {}).get("name", persona_key)
-        engine_label = "Remotion (React & TS)" if engine == "remotion" else "Default Engine"
-        asyncio.run(send_telegram_message(
-            chat_id,
-            f"⏳ *Sedang meracik naskah & merender video reels...*\n"
-            f"📌 Mode: *{persona_name}*\n"
-            f"⚙️ Engine: *{engine_label}*\n"
-            f"🎯 Topik: *{user_prompt}*\n\n"
-            f"Mohon tunggu ~30-45 detik."
-        ))
+        lower_prompt = user_prompt.lower()
 
-        # 1. Panggil Gemini AI
-        script_data = generate_script_data(user_prompt, persona_key=persona_key)
+        # Deteksi Durasi yang diminta pengguna (misal: "8 detik", "15 sec")
+        duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
+        target_duration = int(duration_match.group(1)) if duration_match else 12
+        target_duration = max(5, min(60, target_duration))
 
-        # 2. Render Video (Remotion atau MoviePy)
-        if engine == "remotion":
-            from core.remotion_renderer import render_remotion_video, is_remotion_available
-            if is_remotion_available():
-                render_remotion_video(
-                    hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
-                    points=script_data.get("points", []),
-                    cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
-                    output_mp4_path=temp_video,
-                    persona_key=persona_key
-                )
-            else:
-                # Fallback ke MoviePy jika Remotion belum terpasang di lingkungan lokal
-                create_overlay_image(
-                    hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
-                    points=script_data.get("points", []),
-                    cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
-                    output_path=temp_overlay,
-                    persona_key=persona_key
-                )
-                render_reels_video(overlay_png_path=temp_overlay, output_mp4_path=temp_video)
+        # Deteksi Aspect Ratio
+        if any(k in lower_prompt for k in ["landscape", "16:9", "horizontal", "lebar", "youtube"]):
+            aspect_ratio = "landscape"
+            ratio_label = "16:9 Landscape"
+        elif any(k in lower_prompt for k in ["square", "1:1", "kotak", "feed", "persegi"]):
+            aspect_ratio = "square"
+            ratio_label = "1:1 Square"
+        else:
+            aspect_ratio = "portrait"
+            ratio_label = "9:16 Portrait"
+
+        # Deteksi persona cerdas (jangan kaku haji jika user minta hardware/3d/tech)
+        is_tech = any(k in lower_prompt for k in [
+            "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
+            "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "chip"
+        ])
+        is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
+
+        if is_tech and not is_haji:
+            resolved_persona = "tech_vector"
+        elif is_haji:
+            resolved_persona = "hajidarimuda"
+        elif persona_key != "auto" and persona_key in PERSONAS:
+            resolved_persona = persona_key
+        else:
+            resolved_persona = "tech_vector"
+
+        # Tahap 1: 10% (Kirim pesan progres awal)
+        init_text = (
+            f"🎬 *Sedang Memproses Video Animasi...*\n"
+            f"`[{format_progress_bar(10)}]` *10%*\n\n"
+            f"📍 *Status:* Menganalisis request & target durasi...\n"
+            f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+            f"⏱️ *Durasi Target:* {target_duration} Detik\n"
+            f"🎯 *Topik:* _{user_prompt}_"
+        )
+        progress_msg_id = send_telegram_sync(chat_id, init_text)
+
+        # Tahap 2: 35% (Panggil Gemini AI)
+        if progress_msg_id:
+            edit_telegram_sync(
+                chat_id, progress_msg_id,
+                f"🤖 *Merancang Konsep Visual & Naskah AI...*\n"
+                f"`[{format_progress_bar(35)}]` *35%*\n\n"
+                f"📍 *Status:* Gemini AI sedang menyusun naskah & shot-list scene...\n"
+                f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+                f"⏱️ *Durasi Target:* {target_duration} Detik\n"
+                f"🎯 *Topik:* _{user_prompt}_"
+            )
+
+        script_data = generate_script_data(user_prompt, persona_key=resolved_persona)
+        brand_badge = script_data.get("brand_badge", "⚡ 3D TECH • HARDWARE VECTOR")
+        persona_used = script_data.get("persona_used", resolved_persona)
+        actual_duration = script_data.get("duration_sec", target_duration)
+
+        # Tahap 3: 55% (Menyiapkan Komposisi Remotion)
+        if progress_msg_id:
+            edit_telegram_sync(
+                chat_id, progress_msg_id,
+                f"🎨 *Menyiapkan Komposisi Grafis React...*\n"
+                f"`[{format_progress_bar(55)}]` *55%*\n\n"
+                f"📍 *Status:* Naskah AI siap! Mengompilasi komponen grafis Remotion...\n"
+                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"⚙️ *Format:* Remotion React ({ratio_label})\n"
+                f"⏱️ *Durasi:* {actual_duration} Detik"
+            )
+
+        # Tahap 4: 75% (Merender Remotion 60 FPS)
+        if progress_msg_id:
+            edit_telegram_sync(
+                chat_id, progress_msg_id,
+                f"🎬 *Merender Frame Video Remotion (60 FPS)...*\n"
+                f"`[{format_progress_bar(75)}]` *75%*\n\n"
+                f"📍 *Status:* Engine Remotion sedang me-render aset visual 3D/vektor...\n"
+                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"⚙️ *Format:* Remotion React ({ratio_label})\n"
+                f"⏱️ *Durasi:* {actual_duration} Detik"
+            )
+
+        from core.remotion_renderer import render_remotion_video, is_remotion_available
+        if engine == "remotion" and is_remotion_available():
+            render_remotion_video(
+                hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
+                points=script_data.get("points", []),
+                cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
+                output_mp4_path=temp_video,
+                persona_key=persona_used,
+                aspect_ratio=aspect_ratio,
+                brand_badge=brand_badge,
+                duration_sec=actual_duration
+            )
         else:
             create_overlay_image(
                 hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
                 points=script_data.get("points", []),
                 cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
                 output_path=temp_overlay,
-                persona_key=persona_key
+                persona_key=persona_used
             )
             render_reels_video(overlay_png_path=temp_overlay, output_mp4_path=temp_video)
 
-        # 3. Kirim hasil video & naskah caption lengkap ke pengguna
+        # Tahap 5: 95% (Finalisasi MP4 & Uploading)
+        if progress_msg_id:
+            edit_telegram_sync(
+                chat_id, progress_msg_id,
+                f"🚀 *Finalisasi Video & Mengunggah ke Telegram...*\n"
+                f"`[{format_progress_bar(95)}]` *95%*\n\n"
+                f"📍 *Status:* Encoding video MP4 selesai! Sedang mengunggah media...\n"
+                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"⏱️ *Durasi:* {actual_duration} Detik"
+            )
+
         caption_text = (
-            f"✅ *Video Reels Siap Posting!* ({engine_label})\n"
-            f"🏷️ Mode: *{persona_name}*\n\n"
+            f"✅ *Video Animasi Siap Diposting!*\n"
+            f"🏷️ Kategori: *{brand_badge}*\n"
+            f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*\n\n"
             f"📝 *Salin Teks Caption Ini:*\n\n"
             f"{script_data.get('caption', '')}"
         )
-        asyncio.run(send_telegram_video(chat_id, temp_video, caption_text))
+        send_telegram_video_sync(chat_id, temp_video, caption_text)
+
+        # Tahap 6: 100% (Selesai!)
+        if progress_msg_id:
+            edit_telegram_sync(
+                chat_id, progress_msg_id,
+                f"✅ *Video Selesai Dibuat (100%)!*\n"
+                f"`[{format_progress_bar(100)}]` *100%*\n\n"
+                f"🏷️ *Kategori:* *{brand_badge}*\n"
+                f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+                f"⏱️ *Durasi:* {actual_duration} Detik\n"
+                f"📁 *File video telah dikirimkan di bawah 👇*"
+            )
 
     except Exception as e:
         logger.error(f"Gagal membuat video: {e}", exc_info=True)
-        asyncio.run(send_telegram_message(chat_id, f"❌ Terjadi kendala saat proses render: {str(e)}"))
+        if progress_msg_id:
+            edit_telegram_sync(chat_id, progress_msg_id, f"❌ Terjadi kendala saat proses render: {str(e)}")
+        else:
+            send_telegram_sync(chat_id, f"❌ Terjadi kendala saat proses render: {str(e)}")
 
     finally:
-        # Bersihkan file temp
         for path in (temp_overlay, temp_video):
             if os.path.exists(path):
                 try:
@@ -286,14 +467,13 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         parts = text_clean.split(maxsplit=1)
         if len(parts) > 1:
             topic = parts[1].strip()
-            current_mode = user_active_modes.get(user_id, "hajidarimuda")
-            background_tasks.add_task(process_video_generation, chat_id, topic, current_mode, "remotion")
+            background_tasks.add_task(process_video_generation, chat_id, topic, "auto", "remotion")
         else:
             await send_telegram_message(
                 chat_id,
                 "🎬 *Remotion Video Generator (React & TypeScript)*\n\n"
                 "Silakan masukkan topik video setelah command.\n"
-                "Contoh: `/remotion 3 Arsitektur AI Agent Modern`"
+                "Contoh: `/remotion 8 detik footage ram animasi 3d vektor`"
             )
         return
 
@@ -449,42 +629,30 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         )
         return
 
-    # Perintah /skrip (Naskah Talking Head lengkap dengan shot-list)
-    is_asking_for_script = (
-        lower_text.startswith("/skrip") or
-        lower_text.startswith("/naskah") or
-        "talking head" in lower_text or
-        "naskah video" in lower_text
+    # 1. Deteksi Permintaan Video Animasi (Natural Language tanpa harus tag /remotion)
+    video_triggers = [
+        "bikin video", "bikinin video", "buatkan video", "buat video", "generate video",
+        "render video", "video singkat", "bikin animasi", "buatin animasi", "animasi 3d",
+        "animasi vektor", "footage ram", "footage cpu", "footage video", "bikin reels",
+        "bikinin reels", "buat reels", "render reels", "video 8 detik", "video 10 detik",
+        "video 15 detik", "video 30 detik", "video animasi", "video ram", "video cpu"
+    ]
+    is_video_request = (
+        any(k in lower_text for k in video_triggers) or
+        lower_text.startswith("video ") or
+        lower_text.startswith("animasi ")
     )
 
-    if is_asking_for_script:
-        if text_clean.startswith(("/skrip", "/naskah")):
-            topic = text_clean.split(maxsplit=1)[1] if len(text_clean.split(maxsplit=1)) > 1 else ""
-        else:
-            topic = text_clean
-
-        if not topic:
-            await send_telegram_message(chat_id, "Silakan masukkan topik naskah.\nContoh: `/skrip Bedah Arsitektur Database Nusuk`")
-            return
-
-        persona_key = user_active_modes.get(user_id, "hajidarimuda")
-        persona_name = PERSONAS.get(persona_key, {}).get("name", persona_key)
-
-        await send_telegram_message(chat_id, f"📝 *Sedang menyusun naskah Talking Head & Shot-List ({persona_name})...*")
-        
-        from core.gemini_client import generate_talking_head_script
-        script_full = generate_talking_head_script(topic, persona_key=persona_key)
-        await send_telegram_message(chat_id, script_full)
+    if is_video_request:
+        background_tasks.add_task(process_video_generation, chat_id, text_clean, "auto", "remotion")
         return
 
-    # Perintah /ide atau permintaan ide konten secara natural
-    is_asking_for_ideas = (
-        lower_text.startswith("/ide") or
-        "ide konten" in lower_text or
-        lower_text.startswith("minta ide") or
-        lower_text.startswith("bagi ide") or
-        lower_text.startswith("rekomendasi ide")
-    )
+    # 2. Deteksi Permintaan Ide / Brainstorming
+    idea_triggers = [
+        "/ide", "cari ide", "cariin ide", "minta ide", "kasih ide",
+        "ide konten", "brainstorm", "topik konten", "judul konten", "rekomendasi ide"
+    ]
+    is_asking_for_ideas = any(k in lower_text for k in idea_triggers)
 
     if is_asking_for_ideas:
         if text_clean.startswith("/ide"):
@@ -493,33 +661,53 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
             topic = text_clean
 
         if not topic:
-            await send_telegram_message(chat_id, "Silakan masukkan topik yang ingin dicari idenya.\nContoh: `/ide UI UX aplikasi travel`")
+            await send_telegram_message(chat_id, "Silakan masukkan topik yang ingin dicari idenya.\nContoh: `ide konten tentang arsitektur ram modern`")
             return
 
-        persona_key = user_active_modes.get(user_id, "hajidarimuda")
-        persona_name = PERSONAS.get(persona_key, {}).get("name", persona_key)
-        
-        await send_telegram_message(chat_id, f"💡 *Sedang meracik ide konten sesuai style guide ({persona_name})...*")
-        
+        await send_telegram_message(chat_id, "💡 *Sedang meracik ide konten kreatif dengan AI...*")
         from core.gemini_client import generate_content_ideas
-        ideas_response = generate_content_ideas(topic, persona_key=persona_key)
+        ideas_response = generate_content_ideas(topic, persona_key="auto")
         
         reply = (
-            f"💡 *Brainstorming Ide Konten ({persona_name})*\n"
+            f"💡 *Brainstorming Ide Konten*\n"
             f"🎯 Topik: _{topic}_\n\n"
             f"{ideas_response}\n\n"
             f"───────────────\n"
-            f"🎬 *Mau bikin video reelsnya?*\n"
-            f"Ketik: `Bikinin video topik: <masukkan judul yang kamu pilih>`\n\n"
+            f"🎬 *Mau bikin videonya langsung?*\n"
+            f"Ketik: `Bikinin video 8 detik topik: <masukkan topik>`\n\n"
             f"📝 *Mau naskah talking head lengkap?*\n"
-            f"Ketik: `/skrip <masukkan judul yang kamu pilih>`"
+            f"Ketik: `/skrip <masukkan topik>`"
         )
         await send_telegram_message(chat_id, reply)
         return
 
-    # Default / Pembuatan Video Reels Lengkap
-    current_mode = user_active_modes.get(user_id, "hajidarimuda")
-    background_tasks.add_task(process_video_generation, chat_id, text_clean, current_mode)
+    # 3. Permintaan Naskah / Skrip Talking Head
+    script_triggers = [
+        "/skrip", "/naskah", "talking head", "naskah video", "skrip video",
+        "buat naskah", "bikin naskah", "tulis naskah", "bikinin naskah",
+        "bikinin skrip", "buat skrip", "tulis skrip"
+    ]
+    is_asking_for_script = any(k in lower_text for k in script_triggers)
+
+    if is_asking_for_script:
+        if text_clean.startswith(("/skrip", "/naskah")):
+            parts = text_clean.split(maxsplit=1)
+            topic = parts[1].strip() if len(parts) > 1 else ""
+        else:
+            topic = text_clean
+
+        if not topic:
+            await send_telegram_message(chat_id, "Silakan masukkan topik naskah.\nContoh: `/skrip Bedah Arsitektur Database Nusuk`")
+            return
+
+        await send_telegram_message(chat_id, "📝 *Sedang menyusun naskah Talking Head & Shot-List dengan AI...*")
+        from core.gemini_client import generate_talking_head_script
+        script_full = generate_talking_head_script(topic, persona_key="auto")
+        await send_telegram_message(chat_id, script_full)
+        return
+
+    # 4. Default / Pembuatan Video Animasi (Jika input teks biasa/topik langsung)
+    background_tasks.add_task(process_video_generation, chat_id, text_clean, "auto", "remotion")
 
 
 @app.get("/")

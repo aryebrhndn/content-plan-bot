@@ -109,7 +109,18 @@ def generate_content_ideas(topic_prompt: str, persona_key: str = "hajidarimuda")
     """
     Menghasilkan 4 ide konten kreatif & sudut pandang (angles)
     berdasarkan panduan baku dokumen style guide masing-masing brand.
+    Fleksibel: Topik teknologi/hardware otomatis dialihkan ke persona Arye/Tech.
     """
+    lower_prompt = topic_prompt.lower()
+    is_tech = any(k in lower_prompt for k in [
+        "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
+        "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "chip"
+    ])
+    is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
+
+    if is_tech and not is_haji:
+        persona_key = "arye"
+
     guide_content = load_style_guide(persona_key)
     persona = PERSONAS.get(persona_key, PERSONAS["hajidarimuda"])
 
@@ -142,43 +153,81 @@ Gunakan tone of voice resmi brand tersebut dan format teks yang rapi dan nyaman 
         return f"Gagal mendapatkan ide dari AI: {str(e)}"
 
 
-def generate_script_data(topic_prompt: str, persona_key: str = "hajidarimuda") -> dict:
+def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
     """
-    Menghasilkan naskah konten JSON terstruktur untuk dirender ke video reels vertikal 9:16
-    sesuai dokumen acuan baku masing-masing brand.
+    Menghasilkan naskah konten JSON terstruktur untuk dirender ke video Remotion/Reels.
+    Fleksibel dan adaptif terhadap request pengguna (durasi, topik tech/3D/haji/umum).
     """
-    guide_content = load_style_guide(persona_key)
+    import re
+
+    lower_prompt = topic_prompt.lower()
+    
+    # Deteksi durasi dari request pengguna (misal: "8 detik", "15 detik")
+    duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
+    target_duration = int(duration_match.group(1)) if duration_match else 12
+    # Batasi durasi wajar antara 5 s.d. 60 detik
+    target_duration = max(5, min(60, target_duration))
+
+    # Deteksi apakah topik adalah tentang Tech/Hardware/3D/General vs Haji
+    is_haji_related = any(k in lower_prompt for k in [
+        "haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah", "arafah", "sa'i", "manasik", "kemenag"
+    ])
+    is_tech_or_custom = any(k in lower_prompt for k in [
+        "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
+        "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "grafis", "animasi", "chip"
+    ]) and not is_haji_related
+
+    if is_tech_or_custom:
+        persona_key = "tech_vector"
+        guide_content = load_style_guide("arye")
+        default_badge = "⚡ 3D TECH • HARDWARE VECTOR"
+    elif is_haji_related:
+        persona_key = "hajidarimuda"
+        guide_content = load_style_guide("hajidarimuda")
+        default_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+    elif persona_key == "arye":
+        persona_key = "arye"
+        guide_content = load_style_guide("arye")
+        default_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+    elif persona_key == "hajidarimuda":
+        persona_key = "hajidarimuda"
+        guide_content = load_style_guide("hajidarimuda")
+        default_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+    else:
+        persona_key = "tech_vector"
+        guide_content = load_style_guide("arye")
+        default_badge = "💡 INSIGHT & EDUKASI KREATIF"
+
     persona = PERSONAS.get(persona_key, PERSONAS["hajidarimuda"])
 
-    system_instruction = f"""Kamu adalah Content Strategist dan Scriptwriter profesional untuk brand: "{persona['name']}".
-Gunakan dokumen panduan resmi berikut sebagai acuan mutlak:
-\"\"\"
-{guide_content}
-\"\"\"
+    system_instruction = f"""Kamu adalah Video Creative Director dan Scriptwriter handal.
+Kamu bertugas merancang naskah dan aset visual video berdurasi {target_duration} detik sesuai permintaan pengguna:
+Topik: "{topic_prompt}"
 
-ATURAN STRUKTUR OUTPUT UNTUK VIDEO REELS (VIDEO CAPTION FORMAT):
-1. Jika brand adalah "Haji Dari Muda":
-   - Panggilan wajib: "Teman Jalan"
-   - Tone: Sahabat literasi ibadah, edukatif, data riil (antrean/jarak fisik/biaya), zero hard-selling.
-   - Doa/hadits di caption WAJIB mencantumkan lafaz Arab, teks Latin, arti terjemahan, dan perawi hadits.
-   - Hashtag resmi: #hajidarimuda #edukasihaji #haji #umrah
-2. Jika brand adalah "Arye Burhanudin":
-   - Tone: Santai, logis, analitis, edukatif, bedah fenomena ala Vox / dokumenter digital ("Yuk kita teliti bareng").
-   - Pilar: EdTech / Digital Breakdown / Investigasi & Tabayun / UI/UX Creative Process.
-   - Framework H-C-B-C.
-   - Caption mengulas konteks, rujukan primer, dan solusi logis.
+PANDUAN FLEKSIBEL:
+1. Jika topik berkaitan dengan Hardware / Tech / 3D Vector / Komputer / Umum:
+   - Jangan paksakan konten islami/haji jika tidak diminta!
+   - Buat judul dan poin-poin yang tajam seputar teknologi, visual 3D, atau edukasi hardware.
+   - brand_badge: Berikan label kategori yang keren dan relevan (contoh: "⚡ 3D TECH • HARDWARE VECTOR" atau "💻 SYSTEM ARCHITECTURE").
+2. Jika topik berkaitan dengan Haji Dari Muda:
+   - Panggilan: "Teman Jalan", data riil, edukasi fiqih/manasik praktis.
+   - brand_badge: "🕋 HAJI DARI MUDA • EDUKASI".
 3. Struktur Visual Teks Layar:
-   - hook_header: 1-2 baris huruf kapital tebal yang memicu penasaran (Kotak Atas)
-   - points: List 4 atau 5 poin ringkas penting (Kotak Tengah)
-   - cta_footer: Ajakan aksi yang variatif dan relevan (Kotak Bawah)
-4. Caption: Artikel mikro lengkap siap posting di Instagram/TikTok.
+   - hook_header: 1-2 baris huruf kapital tebal memicu penasaran (Kotak Judul)
+   - points: 3-5 poin ringkas penting yang padat (Kotak Poin)
+   - cta_footer: Ajakan aksi singkat yang relevan (Kotak Bawah)
+   - brand_badge: Label kategori atas
+   - duration_sec: {target_duration}
+   - caption: Naskah caption lengkap siap salin ke Instagram/TikTok/YouTube.
 
 Keluarkan respon HANYA dalam format JSON valid tanpa format markdown ```json ... ```.
 Format:
 {{
+  "brand_badge": "...",
   "hook_header": "...",
   "points": ["...", "..."],
   "cta_footer": "...",
+  "duration_sec": {target_duration},
   "caption": "..."
 }}"""
 
@@ -188,7 +237,7 @@ Format:
                 "parts": [{"text": system_instruction}]
             },
             "contents": [
-                {"parts": [{"text": f"Buatkan naskah video caption reels lengkap untuk topik berikut: {topic_prompt}"}]}
+                {"parts": [{"text": f"Rancang naskah video berdurasi {target_duration} detik untuk topik ini: {topic_prompt}"}]}
             ],
             "generationConfig": {
                 "response_mime_type": "application/json"
@@ -207,6 +256,9 @@ Format:
 
         data = json.loads(text_content)
         data["persona_used"] = persona_key
+        data["duration_sec"] = data.get("duration_sec", target_duration)
+        if not data.get("brand_badge"):
+            data["brand_badge"] = default_badge
         return data
 
     except Exception as e:
@@ -230,6 +282,16 @@ def generate_talking_head_script(topic_prompt: str, persona_key: str = "hajidari
     Menghasilkan naskah video Talking Head lengkap (durasi 60-90 detik)
     lengkap dengan shot-list, arahan visual, B-roll motion, dan SFX sesuai panduan dokumen.
     """
+    lower_prompt = topic_prompt.lower()
+    is_tech = any(k in lower_prompt for k in [
+        "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
+        "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "chip"
+    ])
+    is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
+
+    if is_tech and not is_haji:
+        persona_key = "arye"
+
     guide_content = load_style_guide(persona_key)
     persona = PERSONAS.get(persona_key, PERSONAS["hajidarimuda"])
 
