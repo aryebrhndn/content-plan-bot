@@ -23,7 +23,8 @@ const defaultAryeProps: AryeReelsProps = {
     '• Render video otomatis dengan Remotion & React',
     '• Telegram Bot sebagai antarmuka remote'
   ],
-  cta_footer: 'Follow @aryeburhanudin untuk deep dive tech lainnya!'
+  cta_footer: 'Follow @aryeburhanudin untuk deep dive tech lainnya!',
+  style_variant: 'regular'
 };
 
 const defaultTechProps: TechVectorReelsProps = {
@@ -41,7 +42,7 @@ export const RemotionRoot: React.FC = () => {
   return (
     <>
       {/* 1. Haji Dari Muda - Portrait (9:16) */}
-      <Composition
+      <Composition<any, any>
         id="HajiReels"
         component={HajiReels}
         durationInFrames={1800}
@@ -51,7 +52,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultHajiProps}
       />
       {/* 2. Haji Dari Muda - Landscape (16:9) */}
-      <Composition
+      <Composition<any, any>
         id="HajiReelsLandscape"
         component={HajiReels}
         durationInFrames={1800}
@@ -61,7 +62,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultHajiProps}
       />
       {/* 3. Haji Dari Muda - Square (1:1) */}
-      <Composition
+      <Composition<any, any>
         id="HajiReelsSquare"
         component={HajiReels}
         durationInFrames={1800}
@@ -72,7 +73,7 @@ export const RemotionRoot: React.FC = () => {
       />
 
       {/* 4. Arye Burhanudin - Portrait (9:16) */}
-      <Composition
+      <Composition<any, any>
         id="AryeReels"
         component={AryeReels}
         durationInFrames={1800}
@@ -82,7 +83,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultAryeProps}
       />
       {/* 5. Arye Burhanudin - Landscape (16:9) */}
-      <Composition
+      <Composition<any, any>
         id="AryeReelsLandscape"
         component={AryeReels}
         durationInFrames={1800}
@@ -92,7 +93,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultAryeProps}
       />
       {/* 6. Arye Burhanudin - Square (1:1) */}
-      <Composition
+      <Composition<any, any>
         id="AryeReelsSquare"
         component={AryeReels}
         durationInFrames={1800}
@@ -103,7 +104,7 @@ export const RemotionRoot: React.FC = () => {
       />
 
       {/* 7. Tech Vector / 3D Hardware - Portrait (9:16) */}
-      <Composition
+      <Composition<any, any>
         id="TechVectorReels"
         component={TechVectorReels}
         durationInFrames={1800}
@@ -113,7 +114,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultTechProps}
       />
       {/* 8. Tech Vector / 3D Hardware - Landscape (16:9) */}
-      <Composition
+      <Composition<any, any>
         id="TechVectorReelsLandscape"
         component={TechVectorReels}
         durationInFrames={1800}
@@ -123,7 +124,7 @@ export const RemotionRoot: React.FC = () => {
         defaultProps={defaultTechProps}
       />
       {/* 9. Tech Vector / 3D Hardware - Square (1:1) */}
-      <Composition
+      <Composition<any, any>
         id="TechVectorReelsSquare"
         component={TechVectorReels}
         durationInFrames={1800}

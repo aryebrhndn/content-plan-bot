@@ -62,6 +62,34 @@ laptop_telemetry_data: Dict = {}
 pending_remote_actions: List[Dict] = []
 last_screenshot_chat_id: int = None
 
+# Penyimpanan path file audio yang dilampirkan pengguna per chat_id
+user_uploaded_audio: Dict[int, str] = {}
+
+
+async def download_telegram_file(file_id: str, output_path: str) -> bool:
+    """Mengunduh file audio/media yang dikirimkan user via Telegram ke storage lokal."""
+    if not TELEGRAM_BOT_TOKEN:
+        return False
+    try:
+        async with httpx.AsyncClient(timeout=60.0) as client:
+            res_info = await client.get(f"{TELEGRAM_API_URL}/getFile", params={"file_id": file_id})
+            file_data = res_info.json()
+            if not file_data.get("ok"):
+                logger.error(f"Telegram getFile gagal: {file_data}")
+                return False
+            file_path = file_data["result"]["file_path"]
+            download_url = f"https://api.telegram.org/file/bot{TELEGRAM_BOT_TOKEN}/{file_path}"
+            res_dl = await client.get(download_url)
+            if res_dl.status_code == 200:
+                os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
+                with open(output_path, "wb") as f:
+                    f.write(res_dl.content)
+                logger.info(f"File audio berhasil diunduh ke: {output_path}")
+                return True
+    except Exception as e:
+        logger.error(f"Gagal download file Telegram: {e}")
+    return False
+
 
 async def send_telegram_photo(chat_id: int, photo_bytes: bytes, caption: str = ""):
     """Mengirim file foto ke Telegram."""
@@ -284,25 +312,39 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         elif any(k in lower_prompt for k in ["square", "1:1", "kotak", "feed", "persegi"]):
             aspect_ratio = "square"
             ratio_label = "1:1 Square"
-        else:
+        elif any(k in lower_prompt for k in ["potret", "portrait", "vertical", "tegak", "9:16", "reels", "tiktok", "shorts"]):
             aspect_ratio = "portrait"
             ratio_label = "9:16 Portrait"
-
-        # Deteksi persona cerdas (jangan kaku haji jika user minta hardware/3d/tech)
-        is_tech = any(k in lower_prompt for k in [
-            "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
-            "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "chip"
-        ])
-        is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
-
-        if is_tech and not is_haji:
-            resolved_persona = "tech_vector"
-        elif is_haji:
-            resolved_persona = "hajidarimuda"
-        elif persona_key != "auto" and persona_key in PERSONAS:
-            resolved_persona = persona_key
         else:
+            # Default aspect ratio berdasarkan mode/persona:
+            if persona_key in ["remotion", "tech_vector", "vector"]:
+                aspect_ratio = "landscape"  # Microstock default ke 16:9 Landscape
+                ratio_label = "16:9 Landscape"
+            else:
+                aspect_ratio = "portrait"   # Sosmed (Arye & Haji) default ke 9:16 Portrait
+                ratio_label = "9:16 Portrait"
+
+        # Tentukan persona yang tepat sesuai instruksi mode:
+        if persona_key in ["arye", "personal"]:
+            resolved_persona = "arye"
+        elif persona_key in ["haji", "hajidarimuda"]:
+            resolved_persona = "hajidarimuda"
+        elif persona_key in ["remotion", "tech_vector", "vector"]:
             resolved_persona = "tech_vector"
+        else:
+            is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
+            is_tech = any(k in lower_prompt for k in [
+                "ram", "cpu", "gpu", "3d", "vektor", "vector", "hardware", "laptop", "pc",
+                "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "chip"
+            ])
+            if is_haji:
+                resolved_persona = "hajidarimuda"
+            elif any(k in lower_prompt for k in ["papercut", "paper cut", "daviqin", "berhala", "sajadah", "ali", "arye"]):
+                resolved_persona = "arye"
+            elif any(k in lower_prompt for k in ["microstock", "stock", "shutterstock", "adobe stock"]):
+                resolved_persona = "tech_vector"
+            else:
+                resolved_persona = "arye" if is_tech else "tech_vector"
 
         # Tahap 1: 10% (Kirim pesan progres awal)
         init_text = (
@@ -359,6 +401,9 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             )
 
         from core.remotion_renderer import render_remotion_video, is_remotion_available
+        style_variant = script_data.get("style_variant", "regular")
+        user_audio = user_uploaded_audio.get(chat_id, "")
+
         if engine == "remotion" and is_remotion_available():
             render_remotion_video(
                 hook_text=script_data.get("hook_header", ""),
@@ -369,7 +414,9 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 aspect_ratio=aspect_ratio,
                 brand_badge=brand_badge,
                 duration_sec=actual_duration,
-                is_clean_footage=is_clean_footage
+                is_clean_footage=is_clean_footage,
+                style_variant=style_variant,
+                audio_path=user_audio
             )
         else:
             create_overlay_image(
@@ -392,20 +439,31 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
 
-        if is_clean_footage:
+        is_microstock = script_data.get("is_microstock", False) or is_clean_footage
+        if is_microstock:
+            stock_meta = script_data.get("microstock_meta", {})
+            tags_display = script_data.get("tags") or ", ".join(stock_meta.get("tags", []))
+            title_en = stock_meta.get("title_en", f"3D Vector Graphics - {user_prompt}")
             caption_text = (
-                f"🎬 *Footage Animasi Remotion Siap!* (Clean B-Roll)\n"
-                f"📐 Format: *{ratio_label}* (1920x1080)\n"
-                f"⏱️ Durasi: *{actual_duration} Detik* (30 FPS)\n"
-                f"🎨 Tipe: *3D Hardware RAM & CPU Vector Animation*\n\n"
-                f"💡 _Visual murni tanpa kartu teks / watermark, siap digunakan untuk B-roll & Microstock._"
+                f"🎬 *Footage Animasi Remotion Siap! (Microstock Stock Asset)*\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"🏷️ *Title:* `{title_en}`\n"
+                f"📐 Format: *{ratio_label}* (60 FPS)\n"
+                f"⏱️ Durasi: *{actual_duration} Detik*\n"
+                f"✨ Tipe: *Alpha Channel / Clean B-Roll*\n\n"
+                f"📋 *30 Microstock Keywords / Tags (Siap Copy-Paste):*\n"
+                f"`{tags_display}`\n\n"
+                f"💡 _Visual murni tanpa kartu teks / watermark sosmed. Siap diunggah ke Shutterstock, Adobe Stock, Pond5, atau Envato._"
             )
         else:
+            style_name = "Style Paper Cut (Daviqin)" if style_variant == "papercut" else "Style Regular (Cinematic BRoll)"
             caption_text = (
                 f"✅ *Video Animasi Siap Diposting!*\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
                 f"🏷️ Kategori: *{brand_badge}*\n"
+                f"🎨 Style: *{style_name}*\n"
                 f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*\n\n"
-                f"📝 *Salin Teks Caption Ini:*\n\n"
+                f"📝 *Salin Teks Caption Sosmed Ini:*\n\n"
                 f"{script_data.get('caption', '')}"
             )
         send_telegram_video_sync(chat_id, temp_video, caption_text)
@@ -439,43 +497,135 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                     pass
 
 
-async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, background_tasks: BackgroundTasks):
+async def send_video_validation_card(chat_id: int, user_id: int, detected_topic: str = ""):
+    """Mengirim kartu konfirmasi & validasi spesifikasi video sebelum render."""
+    mode_now = user_active_modes.get(user_id, "remotion")
+    mode_name = PERSONAS.get(mode_now, {}).get("name", mode_now)
+    
+    audio_info = f"✅ Ada ({os.path.basename(user_uploaded_audio[chat_id])})" if chat_id in user_uploaded_audio else "❌ Belum ada (Kirim file MP3/Voice Note ke chat ini jika ingin audio khusus)"
+    topic_header = f"🎯 *Topik Terdeteksi:* _{detected_topic}_\n\n" if detected_topic else ""
+
+    card = (
+        f"🎬 *KONFIRMASI & SPESIFIKASI VIDEO*\n"
+        f"━━━━━━━━━━━━━━━━━━━\n"
+        f"{topic_header}"
+        f"🎯 Mode Aktif: *{mode_name}*\n"
+        f"🎵 Audio Terlampir: _{audio_info}_\n\n"
+        f"Agar video yang dihasilkan presisi dan tidak salah format, tentukan spesifikasinya:\n\n"
+        f"📐 *1. Ukuran & Aspek Rasio:*\n"
+        f"• `16:9` ➔ Lanskap (Microstock Stock Footage / YouTube / Desktop)\n"
+        f"• `9:16` ➔ Potret (Reels Instagram / TikTok / Shorts Sosmed)\n"
+        f"• `1:1` ➔ Kotak (Instagram Feed / LinkedIn)\n\n"
+        f"🎨 *2. Pilihan Style Video:*\n"
+        f"• *Mode Arye:* `regular` (Cinematic BRoll ala 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli) atau `papercut` (Daviqin Vox Style ala 6-DaviqinVid1: kraft paper, cutting grid, tape, stamp, 12fps wiggle)\n"
+        f"• *Mode Haji:* Minimalis Brand (Aksen Merah #DC2626 & Elemen Teks Bersih)\n"
+        f"• *Mode Remotion:* Microstock Asset 3D + 30 Tags SEO (Tanpa Caption Sosmed) + Alpha Channel\n\n"
+        f"📝 *3. Kebutuhan Caption:*\n"
+        f"• *Sosmed (Arye & Haji):* Disertai naskah caption lengkap + hashtag relevan\n"
+        f"• *Microstock (Remotion):* TANPA Caption! Alih-alih caption, bot menyertakan 25-30 SEO Keywords/Tags siap copy-paste\n\n"
+        f"🚀 *Cara Render Cepat:*\n"
+        f"`/render <rasio> <style> topik: <topik Anda>`\n\n"
+        f"💡 *Contoh:*\n"
+        f"1. `/render 16:9 lanskap papercut topik: Arsitektur Cloud VPS`\n"
+        f"2. `/render 9:16 potret regular topik: Sejarah Berhala Kaum Nuh`\n"
+        f"3. `/render 9:16 potret topik: 5 Tips Istithaah Haji Usia Muda`\n"
+        f"4. `/render 16:9 lanskap microstock topik: 3D Vector Dual RAM DDR5`"
+    )
+    await send_telegram_message(chat_id, card)
+
+
+async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, background_tasks: BackgroundTasks, message_data: dict = None):
     """Memproses pesan atau perintah masuk dari Telegram."""
-    global last_screenshot_chat_id, pending_remote_actions
+    global last_screenshot_chat_id, pending_remote_actions, user_uploaded_audio
     # Verifikasi ID User jika filter diaktifkan
     if ALLOWED_USER_IDS and user_id not in ALLOWED_USER_IDS:
         await send_telegram_message(chat_id, "⛔ Akses ditolak. Bot ini bersifat privat untuk pemiliknya.")
         return
 
+    # Deteksi jika ada lampiran Audio (MP3, Voice Note, dsb)
+    if message_data:
+        audio_obj = message_data.get("audio") or message_data.get("voice")
+        if not audio_obj and message_data.get("document"):
+            doc = message_data.get("document", {})
+            mime = doc.get("mime_type", "")
+            fn = doc.get("file_name", "").lower()
+            if "audio" in mime or fn.endswith((".mp3", ".wav", ".m4a", ".aac", ".ogg")):
+                audio_obj = doc
+
+        if audio_obj:
+            file_id = audio_obj.get("file_id")
+            file_name = audio_obj.get("file_name", "audio_input.mp3")
+            save_path = os.path.join(TEMP_DIR, f"audio_{chat_id}_{file_name}")
+            await send_telegram_message(chat_id, "⏳ *Mengunduh file audio Anda...*")
+            success = await download_telegram_file(file_id, save_path)
+            if success:
+                user_uploaded_audio[chat_id] = save_path
+                await send_telegram_message(
+                    chat_id,
+                    f"🎵 *File Audio Berhasil Disimpan!*\n"
+                    f"Nama: `{file_name}`\n\n"
+                    f"Audio ini akan otomatis digabungkan sebagai latar video saat Anda me-render.\n\n"
+                    f"Silakan tentukan video yang ingin dibuat:\n"
+                    f"• `/render 16:9 lanskap papercut topik: [Topik]`\n"
+                    f"• `/render 9:16 potret regular topik: [Topik]`\n"
+                    f"• Atau balas chat ini dengan instruksi video yang Anda inginkan!"
+                )
+                caption = message_data.get("caption", "").strip()
+                if not caption:
+                    return
+                text = caption
+
     text_clean = text.strip()
+    if not text_clean:
+        return
     lower_text = text_clean.lower()
 
     # Perintah /start atau /help
     if text_clean.startswith(("/start", "/help")):
-        mode_now = user_active_modes.get(user_id, "hajidarimuda")
+        mode_now = user_active_modes.get(user_id, "remotion")
         mode_name = PERSONAS.get(mode_now, {}).get("name", mode_now)
         msg = (
             f"👋 *Halo! Selamat datang di Content Engine & Laptop Monitor.*\n\n"
             f"Bot ini mengintegrasikan:\n"
-            f"1. 🎥 *Otomatisasi Naskah & Video Reels* (`Haji Dari Muda` & `Arye Burhanudin`)\n"
-            f"2. 💻 *Windows Task Manager & Remote Control via Telegram* (20 Fitur Lengkap)\n\n"
-            f"Brand Mode Aktif: *{mode_name}*\n\n"
-            f"⚙️ *Navigasi Cepat:*\n"
-            f"• `/panduan` ➔ 📖 *Daftar 20 Tag Lengkap & Fungsinya*\n"
-            f"• `/status` ➔ Overview kondisi laptop (Online/Offline, CPU, RAM, Baterai)\n"
-            f"• `/screen` ➔ Screenshot layar laptop live detik ini\n"
-            f"• `/power` ➔ Kontrol daya laptop (/lock, /sleep, /restart, /shutdown)\n"
-            f"• `/mode` ➔ Ganti brand acuan konten\n"
+            f"1. 🎥 *Video & Content Engine* (Remotion Microstock, Arye Burhanudin, Haji Dari Muda)\n"
+            f"2. 💻 *Windows Remote Monitor & Control* (20 Fitur Lengkap Real-time)\n\n"
+            f"🎯 Mode Aktif: *{mode_name}*\n\n"
+            f"⚙️ *Navigasi Perintah:*\n"
+            f"• `/mode` ➔ Ganti mode bot (`/mode remotion`, `/mode arye`, `/mode haji`)\n"
+            f"• `/render` ➔ Menu konfirmasi & spesifikasi pembuatan video (rasio, style, audio)\n"
             f"• `/ide <topik>` ➔ Brainstorming ide sudut pandang konten\n"
-            f"• `/skrip <topik>` ➔ Naskah Talking Head lengkap (Shot-list visual & B-Roll)\n"
-            f"• `/remotion <topik>` ➔ Render video animasi React & TypeScript (Remotion Engine)\n"
-            f"• Kirim topik langsung ➔ Merender video reels MP4 vertikal 9:16 + caption!\n\n"
-            f"💡 _Ketik `/panduan` untuk melihat seluruh panduan pengecekan hardware & sistem._"
+            f"• `/skrip <topik>` ➔ Naskah Talking Head lengkap (Shot-list & B-Roll)\n"
+            f"• `/panduan` ➔ 📖 Daftar 20 tag monitoring & remote laptop\n"
+            f"• `/status` | `/cpu` | `/ram` | `/screen` ➔ Cek kondisi & jepret layar laptop\n\n"
+            f"💡 *Tanya Bebas Kapan Saja:* Anda bisa bertanya apa pun, berdiskusi sistem, tanya arsitektur, fiqih, atau ide konten secara bebas. Bot akan menjawab cerdas dan tidak kaku!"
         )
         await send_telegram_message(chat_id, msg)
         return
 
-    # Perintah /remotion <topik> (Render video via Remotion React/TS Engine)
+    # Perintah /render atau /video (Validasi dan eksekusi render video)
+    if text_clean.startswith(("/render", "/video", "/bikin_video")):
+        user_curr_mode = user_active_modes.get(user_id, "remotion")
+        default_persona = "arye" if user_curr_mode in ["arye", "personal"] else ("hajidarimuda" if user_curr_mode in ["haji", "hajidarimuda"] else "tech_vector")
+        parts = text_clean.split(maxsplit=1)
+        if len(parts) > 1 and len(parts[1].strip()) > 3:
+            req_text = parts[1].strip()
+            # Cek apakah user sudah memberikan spesifikasi (rasio/style/topik:)
+            has_spec = any(k in req_text.lower() for k in [
+                "16:9", "9:16", "1:1", "lanskap", "landscape", "potret", "portrait", "kotak", "square",
+                "papercut", "paper cut", "daviqin", "regular", "microstock", "stock", "clean", "topik:"
+            ])
+            if has_spec:
+                background_tasks.add_task(process_video_generation, chat_id, req_text, default_persona, "remotion")
+                return
+            else:
+                await send_video_validation_card(chat_id, user_id, detected_topic=req_text)
+                return
+
+        # Jika tanpa parameter: tampilkan kartu validasi & panduan
+        await send_video_validation_card(chat_id, user_id)
+        return
+
+    # Perintah /remotion <topik> (Render video via Remotion Microstock/3D Vector Engine)
     if text_clean.startswith("/remotion"):
         parts = text_clean.split(maxsplit=1)
         if len(parts) > 1:
@@ -484,9 +634,12 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         else:
             await send_telegram_message(
                 chat_id,
-                "🎬 *Remotion Video Generator (React & TypeScript)*\n\n"
-                "Silakan masukkan topik video setelah command.\n"
-                "Contoh: `/remotion 8 detik footage ram animasi 3d vektor lanskap`"
+                f"🎬 *Remotion Microstock & 3D Vector Engine*\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"Mode ini menghasilkan visual footage murni untuk Microstock (Shutterstock, Adobe Stock, Pond5) "
+                f"tanpa caption sosmed, dilengkapi **30 Keywords/Tags SEO** siap copy-paste, serta dukungan Alpha Channel.\n\n"
+                f"Silakan ketik request Anda:\n"
+                f"Contoh: `/remotion 16:9 lanskap 10 detik footage ram ddr5 3d vector`"
             )
         return
 
@@ -514,8 +667,12 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         else:
             await send_telegram_message(
                 chat_id,
-                "🕋 *Haji Dari Muda Reels Generator*\n\n"
-                "Masukkan topik. Contoh: `/haji 5 Tips Istithaah Usia Muda`"
+                f"🕋 *Haji Dari Muda Content & Video Engine*\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"Menghasilkan video dan naskah edukasi haji/umrah muda ('Teman Jalan') "
+                f"dengan visual minimalis elegan, aksen merah brand, dan tipografi bersih.\n\n"
+                f"Ketik request Anda:\n"
+                f"Contoh: `/haji 9:16 potret topik: 5 Tips Nabung Porsi Haji Sejak Kuliah`"
             )
         return
 
@@ -528,8 +685,15 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         else:
             await send_telegram_message(
                 chat_id,
-                "🎙️ *Arye Burhanudin Tech Breakdown*\n\n"
-                "Masukkan topik. Contoh: `/arye Bedah Arsitektur Microservices`"
+                f"🎙️ *Arye Burhanudin Content & Video Engine*\n"
+                f"━━━━━━━━━━━━━━━━━━━\n"
+                f"Pilihan Style Video:\n"
+                f"1. *Style Biasa (BRoll Cinematic)* ➔ Mengacu `2-BerhalaKaumNuh`, `3-SajadahSyirik`, `4-MisiKpdAli`\n"
+                f"2. *Style Paper Cut (Daviqin Template)* ➔ Mengacu `6-DaviqinVid1` (Paper texture, cutting mat grid, scotch tape, rubber stamp, 12fps wiggle)\n\n"
+                f"Ketik request Anda:\n"
+                f"Contoh:\n"
+                f"• `/arye 16:9 lanskap papercut topik: Bedah Arsitektur Microservices`\n"
+                f"• `/arye 9:16 potret regular topik: Kenapa RAM 16GB Terasa Kurang`"
             )
         return
 
@@ -702,23 +866,46 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
     else:
         default_persona = "tech_vector"
 
-    # 1. Deteksi Permintaan Video Animasi (Natural Language tanpa harus tag /remotion)
-    video_triggers = [
-        "bikin video", "bikinin video", "buatkan video", "buat video", "generate video",
-        "render video", "video singkat", "bikin animasi", "buatin animasi", "animasi 3d",
-        "animasi vektor", "footage ram", "footage cpu", "footage video", "bikin reels",
-        "bikinin reels", "buat reels", "render reels", "video 8 detik", "video 10 detik",
-        "video 15 detik", "video 30 detik", "video animasi", "video ram", "video cpu"
+    # Deteksi apakah pesan merupakan PERTANYAAN, DISKUSI, ATAU KENDALA URGENT
+    question_indicators = [
+        "kenapa", "mengapa", "gimana", "bagaimana", "apa ", "apakah", "apaan",
+        "tolong jelaskan", "jelasin", "jelaskan", "solusi", "urgent", "error", "rusak",
+        "kenapakah", "maksudnya", "artinya", "bedanya", "perbedaan", "review",
+        "menurutmu", "menurut kamu", "bisa bantu", "tanya", "konsultasi", "diskusi"
     ]
-    is_video_request = (
-        any(k in lower_text for k in video_triggers) or
-        lower_text.startswith("video ") or
-        lower_text.startswith("animasi ")
+    is_question_or_urgent = (
+        any(q in lower_text for q in question_indicators) or
+        "?" in text_clean or
+        lower_text.startswith(("kenapa", "bagaimana", "gimana", "apa", "apakah", "tolong", "siapa", "kapan", "dimana", "mengapa"))
     )
 
+    # 1. Deteksi Permintaan Video Animasi (Hanya jika BUKAN pertanyaan/urgent)
+    video_triggers = [
+        "bikin video", "bikinin video", "buatkan video", "buat video", "generate video",
+        "render video", "bikin animasi", "buatin animasi", "animasi 3d",
+        "animasi vektor", "bikin reels", "bikinin reels", "buat reels", "render reels",
+        "generate footage", "render footage"
+    ]
+    is_video_request = (not is_question_or_urgent) and any(k in lower_text for k in video_triggers)
+
     if is_video_request:
-        background_tasks.add_task(process_video_generation, chat_id, text_clean, default_persona, "remotion")
-        return
+        # Cek apakah permintaan sudah memiliki spesifikasi lengkap (rasio / style / topik spesifik)
+        has_spec = any(k in lower_text for k in [
+            "16:9", "9:16", "1:1", "lanskap", "landscape", "potret", "portrait", "kotak", "square",
+            "papercut", "paper cut", "daviqin", "regular", "microstock", "stock", "clean", "topik:"
+        ])
+        if has_spec:
+            background_tasks.add_task(process_video_generation, chat_id, text_clean, default_persona, "remotion")
+            return
+        else:
+            # Jika user hanya meminta video secara umum tanpa spesifikasi format/style,
+            # berikan kartu konfirmasi & validasi feedback terlebih dahulu
+            topic_hint = text_clean
+            for vt in video_triggers:
+                topic_hint = topic_hint.replace(vt, "")
+            topic_hint = topic_hint.strip()
+            await send_video_validation_card(chat_id, user_id, detected_topic=topic_hint)
+            return
 
     # 2. Deteksi Permintaan Ide / Brainstorming
     idea_triggers = [
@@ -739,7 +926,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
 
         await send_telegram_message(chat_id, "💡 *Sedang meracik ide konten kreatif dengan AI...*")
         from core.gemini_client import generate_content_ideas
-        ideas_response = generate_content_ideas(topic, persona_key="auto")
+        ideas_response = generate_content_ideas(topic, persona_key=default_persona)
         
         reply = (
             f"💡 *Brainstorming Ide Konten*\n"
@@ -747,9 +934,9 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
             f"{ideas_response}\n\n"
             f"───────────────\n"
             f"🎬 *Mau bikin videonya langsung?*\n"
-            f"Ketik: `Bikinin video 8 detik topik: <masukkan topik>`\n\n"
+            f"Ketik: `/render 16:9 lanskap papercut topik: {topic}`\n\n"
             f"📝 *Mau naskah talking head lengkap?*\n"
-            f"Ketik: `/skrip <masukkan topik>`"
+            f"Ketik: `/skrip {topic}`"
         )
         await send_telegram_message(chat_id, reply)
         return
@@ -775,12 +962,18 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
 
         await send_telegram_message(chat_id, "📝 *Sedang menyusun naskah Talking Head & Shot-List dengan AI...*")
         from core.gemini_client import generate_talking_head_script
-        script_full = generate_talking_head_script(topic, persona_key="auto")
+        script_full = generate_talking_head_script(topic, persona_key=default_persona)
         await send_telegram_message(chat_id, script_full)
         return
 
-    # 4. Default / Pembuatan Video Animasi (Jika input teks biasa/topik langsung)
-    background_tasks.add_task(process_video_generation, chat_id, text_clean, default_persona, "remotion")
+    # 4. CHAT CERDAS & TANYA JAWAB DENGAN GEMINI AI (Fallback Cerdas, Tidak Kaku!)
+    # Jika user mempertanyakan sesuatu yang tidak diketahui, urgent, diskusi ide/konsep, atau ngobrol:
+    # Jawab secara cerdas dan kontekstual, JANGAN langsung auto-render video!
+    await send_telegram_message(chat_id, "🤔 *Sedang menganalisis & menyusun jawaban...*")
+    from core.gemini_client import chat_with_gemini
+    ai_answer = chat_with_gemini(text_clean, persona_key=user_curr_mode)
+    await send_telegram_message(chat_id, ai_answer)
+    return
 
 
 @app.get("/")
@@ -866,17 +1059,19 @@ def get_telemetry():
 
 @app.post("/webhook")
 async def telegram_webhook(request: Request, background_tasks: BackgroundTasks):
-    """Menerima pesan Telegram via Webhook saat dideploy di Hugging Face."""
+    """Menerima pesan Telegram via Webhook saat dideploy di Hugging Face / Railway."""
     try:
         data = await request.json()
     except Exception:
         return {"status": "invalid json"}
 
-    if "message" in data and "text" in data["message"]:
-        chat_id = data["message"]["chat"]["id"]
-        user_id = data["message"]["from"]["id"]
-        text = data["message"]["text"]
-        await handle_user_command_or_message(chat_id, user_id, text, background_tasks)
+    if "message" in data:
+        msg = data["message"]
+        chat_id = msg.get("chat", {}).get("id")
+        user_id = msg.get("from", {}).get("id")
+        text = msg.get("text", "") or msg.get("caption", "")
+        if chat_id and user_id:
+            await handle_user_command_or_message(chat_id, user_id, text, background_tasks, message_data=msg)
 
     return {"status": "success"}
 
@@ -903,15 +1098,16 @@ async def run_local_polling():
                 updates = res.json().get("result", [])
                 for u in updates:
                     offset = u["update_id"] + 1
-                    if "message" in u and "text" in u["message"]:
-                        chat_id = u["message"]["chat"]["id"]
-                        user_id = u["message"]["from"]["id"]
-                        text = u["message"]["text"]
-                        
-                        current_bg = BackgroundTasks()
-                        await handle_user_command_or_message(chat_id, user_id, text, current_bg)
-                        for task in current_bg.tasks:
-                            asyncio.get_event_loop().run_in_executor(None, task.func, *task.args)
+                    if "message" in u:
+                        msg = u["message"]
+                        chat_id = msg.get("chat", {}).get("id")
+                        user_id = msg.get("from", {}).get("id")
+                        text = msg.get("text", "") or msg.get("caption", "")
+                        if chat_id and user_id:
+                            current_bg = BackgroundTasks()
+                            await handle_user_command_or_message(chat_id, user_id, text, current_bg, message_data=msg)
+                            for task in current_bg.tasks:
+                                asyncio.get_event_loop().run_in_executor(None, task.func, *task.args)
             except asyncio.CancelledError:
                 break
             except Exception as e:

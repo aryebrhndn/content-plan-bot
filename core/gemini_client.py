@@ -182,10 +182,110 @@ Gunakan tone of voice resmi brand tersebut dan format teks yang rapi dan nyaman 
         return f"Gagal mendapatkan ide dari AI: {str(e)}"
 
 
+def chat_with_gemini(user_message: str, persona_key: str = "remotion") -> str:
+    """
+    Menjawab pertanyaan, diskusi, atau konsultasi dari pengguna secara cerdas dan kontekstual.
+    Menyesuaikan persona aktif (Arye Burhanudin / Haji Dari Muda / Remotion Stock Animator).
+    """
+    guide_content = load_style_guide(persona_key)
+    
+    if persona_key in ["arye", "personal"]:
+        system_persona = (
+            "Kamu adalah Arye Burhanudin — tech educator, system architect, dan creator konten mendalam. "
+            "Gaya bicaramu kritis, analitis, sistematis, berbobot, berbasis data & arsitektur nyata ala Vox/Daviqin. "
+            "Bantu user menjawab pertanyaan apa pun seputar teknologi, cloud, sistem, coding, atau diskusi konsep. "
+            "Jika mereka bertanya santai atau mempertanyakan sesuatu yang belum diketahui, jelaskan dengan gamblang, analogi cerdas, dan to the point. "
+            "PENTING: Jangan kaku! Jangan langsung memaksakan generate video jika user hanya bertanya atau berdiskusi."
+        )
+    elif persona_key in ["haji", "hajidarimuda"]:
+        system_persona = (
+            "Kamu adalah konsultan dan kreator brand 'Haji Dari Muda'. "
+            "Gaya bicaramu hangat, bersahabat, memanggil 'Teman Jalan', santun, sarat nilai ibadah, fiqih/manasik praktis, dan menyemangati anak muda. "
+            "Bantu user menjawab pertanyaan fiqih haji/umrah, persiapan porsi, tips istithaah, atau diskusi ide konten. "
+            "Jawab secara cerdas, jelas, dan ramah tanpa langsung memaksakan generate video."
+        )
+    else:  # Remotion / Microstock
+        system_persona = (
+            "Kamu adalah Creative Motion Director & Microstock Stock Footage Specialist. "
+            "Keahlianmu adalah grafis animasi vektor 3D, Remotion React, motion design, dan monetisasi asset di pasar microstock (Shutterstock, Adobe Stock, Pond5, Envato). "
+            "Bantu user berdiskusi tentang ide footage, aspek rasio (16:9 lanskap, 9:16 potret, 1:1), alpha channel (transparan), SEO keywords/tags microstock, atau pertanyaan umum. "
+            "Jawab secara profesional, fleksibel, cerdas, dan tidak kaku."
+        )
+
+    full_instruction = f"""{system_persona}
+
+Acuan Tambahan:
+{guide_content[:1500] if guide_content else ''}
+
+Tugasmu:
+Jawab pertanyaan/pesan pengguna dengan cerdas, informatif, dan mengalir natural.
+Jika relevan di akhir jawaban, kamu boleh memberi saran singkat: 'Kalau kamu mau buatkan video animasinya, kasih tahu aja formatnya (16:9 lanskap / 9:16 potret / 1:1) atau bisa kirim audio MP3 pendukung!' namun utamakan menjawab inti pertanyaannya dengan tuntas terlebih dahulu."""
+
+    try:
+        payload = {
+            "system_instruction": {"parts": [{"text": full_instruction}]},
+            "contents": [{"parts": [{"text": user_message}]}]
+        }
+        res_data = call_gemini_api(payload)
+        return res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+    except Exception as e:
+        logger.error(f"Gagal chat_with_gemini: {e}", exc_info=True)
+        return f"Maaf, sedang ada kendala koneksi AI: {e}"
+
+
+def generate_microstock_metadata(topic: str) -> dict:
+    """
+    Menghasilkan metadata khusus Microstock (Shutterstock, Adobe Stock, Pond5, Envato):
+    - Title bahasa Inggris & Indonesia (Search-friendly)
+    - Kategori / Genre
+    - 25-30 SEO Keywords / Tags (dipisahkan koma, siap copy-paste)
+    - Spesifikasi teknis (Resolution, Alpha Channel, FPS)
+    """
+    system_instruction = """Kamu adalah Microstock Keywording Specialist dan SEO Video Stock Expert (Shutterstock, Adobe Stock, Pond5, Envato).
+Tugas: Dari topik visual yang diberikan, buatkan metadata microstock profesional.
+SANGAT PENTING: Untuk microstock, TIDAK PERLU caption sosial media! Yang dibutuhkan adalah tags/keywords SEO untuk memudahkan pembeli mencari video ini.
+1. title_en: Judul deskriptif komersial dalam bahasa Inggris (maks 80 karakter).
+2. title_id: Terjemahan judul deskriptif bahasa Indonesia.
+3. category: Kategori footage (misal: Technology, Business, Science, Abstract).
+4. tags: Minimal 25 sampai 30 keyword bahasa Inggris yang sangat relevan dan dicari buyer, dipisahkan koma.
+5. technical_notes: Catatan spesifikasi teknis (Alpha Channel / Transparent, ProRes/WebM, 60 FPS, Resolution).
+
+Keluarkan HANYA format JSON valid:
+{
+  "title_en": "...",
+  "title_id": "...",
+  "category": "...",
+  "tags": ["keyword1", "keyword2", "..."],
+  "technical_notes": "..."
+}"""
+
+    try:
+        payload = {
+            "system_instruction": {"parts": [{"text": system_instruction}]},
+            "contents": [{"parts": [{"text": f"Generate microstock metadata untuk footage grafis: {topic}"}]}],
+            "generationConfig": {"response_mime_type": "application/json"}
+        }
+        res_data = call_gemini_api(payload)
+        text_content = res_data["candidates"][0]["content"]["parts"][0]["text"].strip()
+        if text_content.startswith("```json"): text_content = text_content[7:]
+        if text_content.startswith("```"): text_content = text_content[3:]
+        if text_content.endswith("```"): text_content = text_content[:-3]
+        return json.loads(text_content.strip())
+    except Exception as e:
+        logger.error(f"Gagal generate_microstock_metadata: {e}")
+        return {
+            "title_en": f"3D Vector Motion Graphics - {topic}",
+            "title_id": f"Animasi Vektor Grafis 3D - {topic}",
+            "category": "Technology & Science",
+            "tags": ["3d animation", "motion graphics", "vector", "technology", "hardware", "computer", "digital", "isolated", "alpha channel", "stock footage", "futuristic", "data", "electronics", "circuit", "rendering"],
+            "technical_notes": "60 FPS • 16:9 4K/FHD • ProRes 4444 Alpha Channel / Clean Background"
+        }
+
+
 def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
     """
     Menghasilkan naskah konten JSON terstruktur untuk dirender ke video Remotion/Reels.
-    Fleksibel dan adaptif terhadap request pengguna (durasi, topik tech/3D/haji/umum).
+    Fleksibel dan adaptif terhadap request pengguna (durasi, topik tech/3D/haji/umum, dan variasi style).
     """
     import re
 
@@ -194,34 +294,42 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
     # Deteksi durasi dari request pengguna (misal: "8 detik", "15 detik")
     duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
     target_duration = int(duration_match.group(1)) if duration_match else 12
-    # Batasi durasi wajar antara 5 s.d. 60 detik
     target_duration = max(5, min(60, target_duration))
 
-    # Deteksi apakah permintaan adalah B-Roll / Clean Footage (tanpa teks / infografis)
-    is_clean_footage = any(k in lower_prompt for k in [
-        "footage", "b-roll", "broll", "tanpa teks", "no text", "clean",
-        "animasi saja", "vektor saja", "gambar saja", "hanya animasi",
-        "microstock", "video stock", "background", "loop"
-    ]) and not any(k in lower_prompt for k in ["reels", "tips", "edukasi", "penjelasan", "hadits"])
+    # Deteksi Mode Microstock / Clean Footage (Mode Remotion atau kata kunci stock)
+    is_microstock = (
+        persona_key in ["remotion", "vector", "tech_vector"] or
+        any(k in lower_prompt for k in [
+            "microstock", "stock footage", "shutterstock", "adobe stock", "b-roll", "broll",
+            "tanpa caption", "tanpa teks", "no text", "clean footage", "alpha channel", "transparan"
+        ])
+    ) and not any(k in lower_prompt for k in ["haji", "umrah", "naskah sosmed"])
 
-    if is_clean_footage:
+    if is_microstock:
+        stock_meta = generate_microstock_metadata(topic_prompt)
+        tags_str = ", ".join(stock_meta.get("tags", []))
         return {
             "hook_header": "",
             "points": [],
             "cta_footer": "",
-            "brand_badge": "⚡ 3D HARDWARE • CLEAN FOOTAGE",
+            "brand_badge": "⚡ 3D HARDWARE • MICROSTOCK ASSET",
             "duration_sec": target_duration,
             "is_clean_footage": True,
+            "is_microstock": True,
             "persona_used": "tech_vector",
-            "caption": (
-                f"🎬 *Footage Animasi Remotion Siap!*\n"
-                f"⏱️ Durasi: *{target_duration} Detik* (30 FPS)\n"
-                f"🎨 Tipe: *3D Hardware RAM & CPU Vector Animation*\n"
-                f"💡 _Visual murni tanpa kartu teks / watermark, siap digunakan untuk B-roll & Microstock._"
-            )
+            "style_variant": "clean_vector",
+            "microstock_meta": stock_meta,
+            "caption": "",  # TANPA CAPTION UNTUK MICROSTOCK
+            "tags": tags_str
         }
 
-    # Deteksi apakah topik adalah tentang Tech/Hardware/3D/General vs Haji
+    # Deteksi Style Khusus untuk Mode Arye Burhanudin:
+    # 1. Style Paper Cut / Daviqin (mengacu template 6-DaviqinVid1)
+    # 2. Style Biasa (mengacu 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli)
+    is_papercut_style = any(k in lower_prompt for k in ["paper cut", "papercut", "daviqin", "paper-cut", "vox", "kliping", "kolase", "stop motion"])
+    style_variant = "papercut" if is_papercut_style else "regular"
+
+    # Deteksi apakah topik adalah tentang Tech/Hardware/3D vs Haji
     is_haji_related = any(k in lower_prompt for k in [
         "haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah", "arafah", "sa'i", "manasik", "kemenag"
     ])
@@ -230,24 +338,16 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
         "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "grafis", "animasi", "chip"
     ]) and not is_haji_related
 
-    if is_tech_or_custom:
-        persona_key = "tech_vector"
-        guide_content = load_style_guide("arye")
-        default_badge = "⚡ 3D TECH • HARDWARE VECTOR"
-    elif is_haji_related:
-        persona_key = "hajidarimuda"
-        guide_content = load_style_guide("hajidarimuda")
-        default_badge = "🕋 HAJI DARI MUDA • EDUKASI"
-    elif persona_key == "arye":
+    if is_tech_or_custom or persona_key in ["arye", "personal"]:
         persona_key = "arye"
         guide_content = load_style_guide("arye")
-        default_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
-    elif persona_key == "hajidarimuda":
+        default_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if style_variant == "papercut" else "🎙️ ARYE BURHANUDIN • DEEP DIVE TECH"
+    elif is_haji_related or persona_key in ["haji", "hajidarimuda"]:
         persona_key = "hajidarimuda"
         guide_content = load_style_guide("hajidarimuda")
         default_badge = "🕋 HAJI DARI MUDA • EDUKASI"
     else:
-        persona_key = "tech_vector"
+        persona_key = "arye"
         guide_content = load_style_guide("arye")
         default_badge = "💡 INSIGHT & EDUKASI KREATIF"
 
@@ -310,6 +410,7 @@ Format:
         data = json.loads(text_content)
         data["persona_used"] = persona_key
         data["duration_sec"] = data.get("duration_sec", target_duration)
+        data["style_variant"] = style_variant
         if not data.get("brand_badge"):
             data["brand_badge"] = default_badge
         return data
@@ -326,7 +427,8 @@ Format:
             ],
             "cta_footer": "Simpan info penting ini! 📌",
             "caption": f"Topik: {topic_prompt}\n\nSemoga bermanfaat!\n\n#konten #edukasi #insight",
-            "persona_used": persona_key
+            "persona_used": persona_key,
+            "style_variant": style_variant
         }
 
 

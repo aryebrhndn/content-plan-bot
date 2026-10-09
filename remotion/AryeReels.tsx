@@ -13,19 +13,28 @@ export interface AryeReelsProps {
   cta_footer: string;
   brand_badge?: string;
   theme?: string;
+  style_variant?: 'regular' | 'papercut';
 }
 
 export const AryeReels: React.FC<AryeReelsProps> = ({
   hook_header,
   points = [],
   cta_footer,
-  brand_badge
+  brand_badge,
+  style_variant = 'regular'
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
 
   const isLandscape = width > height; // 16:9 (1920x1080)
   const isSquare = width === height;  // 1:1 (1080x1080)
+  const isPapercut = style_variant === 'papercut';
+
+  // 12 FPS Stop-Motion Rostrum Wiggle (khas template Daviqin 6-DaviqinVid1)
+  const stepFrame = Math.floor(frame / 2.5);
+  const wiggleX = isPapercut ? Math.sin(stepFrame * 1.7) * 2.5 : 0;
+  const wiggleY = isPapercut ? Math.cos(stepFrame * 1.3) * 2.0 : 0;
+  const wiggleRot = isPapercut ? Math.sin(stepFrame * 0.9) * 0.45 : 0;
 
   // Animasi Header (Paper Slam Entry)
   const headerSpring = spring({
@@ -35,6 +44,57 @@ export const AryeReels: React.FC<AryeReelsProps> = ({
   });
   const headerTranslateY = interpolate(headerSpring, [0, 1], [-120, 0]);
   const headerRotation = interpolate(headerSpring, [0, 1], [4, -1.8]);
+
+  // Elemen Cutting Mat Grid & Scotch Tape Daviqin
+  const renderPapercutDetails = () => {
+    if (!isPapercut) return null;
+    return (
+      <>
+        {/* Cutting Mat Precision Grid */}
+        <svg
+          style={{
+            position: 'absolute',
+            top: 0,
+            left: 0,
+            width: '100%',
+            height: '100%',
+            pointerEvents: 'none',
+            opacity: 0.18
+          }}
+        >
+          <defs>
+            <pattern id="cuttingGrid" width="40" height="40" patternUnits="userSpaceOnUse">
+              <path d="M 40 0 L 0 0 0 40" fill="none" stroke="#001A4D" strokeWidth="1" />
+              <circle cx="20" cy="20" r="1.5" fill="#001A4D" />
+            </pattern>
+          </defs>
+          <rect width="100%" height="100%" fill="url(#cuttingGrid)" />
+        </svg>
+
+        {/* Vintage Rubber Stamp: EXHIBIT #01 */}
+        <div
+          style={{
+            position: 'absolute',
+            top: isLandscape ? 35 : 45,
+            right: isLandscape ? 50 : 45,
+            border: '4px dashed #E63946',
+            color: '#E63946',
+            padding: '8px 18px',
+            fontSize: isLandscape ? 20 : 22,
+            fontWeight: 900,
+            letterSpacing: 2,
+            textTransform: 'uppercase',
+            transform: 'rotate(-9deg)',
+            borderRadius: 6,
+            opacity: 0.88,
+            boxShadow: 'inset 0 0 6px rgba(230, 57, 70, 0.3)'
+          }}
+        >
+          RECORD VERIFIED • EXHIBIT #01
+        </div>
+      </>
+    );
+  };
 
   if (isLandscape) {
     // LAYOUT LANDSCAPE (16:9) — Vox Editorial 2-Column Split
@@ -49,9 +109,11 @@ export const AryeReels: React.FC<AryeReelsProps> = ({
           justifyContent: 'space-between',
           padding: '60px 80px',
           boxSizing: 'border-box',
-          gap: 60
+          gap: 60,
+          transform: isPapercut ? `translate(${wiggleX}px, ${wiggleY}px) rotate(${wiggleRot}deg)` : undefined
         }}
       >
+        {renderPapercutDetails()}
         {/* Kolom Kiri: Badge + Yellow Header + Red CTA */}
         <div style={{ flex: 1, display: 'flex', flexDirection: 'column', justifyContent: 'space-between', height: '100%' }}>
           <div
@@ -187,9 +249,11 @@ export const AryeReels: React.FC<AryeReelsProps> = ({
         alignItems: 'center',
         justifyContent: 'space-between',
         padding: pad,
-        boxSizing: 'border-box'
+        boxSizing: 'border-box',
+        transform: isPapercut ? `translate(${wiggleX}px, ${wiggleY}px) rotate(${wiggleRot}deg)` : undefined
       }}
     >
+      {renderPapercutDetails()}
       <div
         style={{
           backgroundColor: '#001A4D',
