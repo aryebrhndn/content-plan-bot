@@ -583,6 +583,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         parts = text_clean.split(maxsplit=1)
         if len(parts) > 1:
             target_proc = parts[1].strip()
+            last_screenshot_chat_id = chat_id
             pending_remote_actions.append({"action": "kill", "param": target_proc})
             await send_telegram_message(chat_id, f"⏳ Perintah mematikan proses `{target_proc}` telah dikirim ke laptop...")
         else:
@@ -633,6 +634,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
 
     if text_clean.startswith(("/lock", "/sleep", "/restart", "/shutdown")):
         cmd = text_clean.split()[0].replace("/", "")
+        last_screenshot_chat_id = chat_id
         pending_remote_actions.append({"action": cmd, "param": ""})
         await send_telegram_message(chat_id, f"⚡ Perintah remote daya `/{cmd}` telah dikirimkan ke laptop!")
         return
@@ -836,6 +838,24 @@ async def upload_screen(request: Request):
         await send_telegram_photo(last_screenshot_chat_id, content, caption="📸 *Tampilan Layar Laptop Terkini*")
         return {"status": "sent"}
     return {"status": "no recipient or empty file"}
+
+
+@app.post("/api/action_result")
+async def receive_action_result(request: Request):
+    """Menerima konfirmasi hasil eksekusi remote command dari laptop dan mengabarkannya ke Telegram."""
+    token = request.headers.get("X-Telemetry-Token") or request.query_params.get("token")
+    if WEBHOOK_SECRET and token != WEBHOOK_SECRET:
+        return {"status": "unauthorized"}
+    global last_screenshot_chat_id
+    try:
+        data = await request.json()
+    except Exception:
+        return {"status": "invalid json"}
+    msg = data.get("message", "")
+    if last_screenshot_chat_id and msg:
+        await send_telegram_message(last_screenshot_chat_id, msg)
+        return {"status": "sent"}
+    return {"status": "ok"}
 
 
 @app.get("/api/telemetry")

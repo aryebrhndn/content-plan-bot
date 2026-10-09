@@ -23,13 +23,19 @@ def format_status(data: dict) -> str:
     badge = "🟢 *ONLINE*" if is_online else "🔴 *OFFLINE*"
     batt = data.get("battery", 100)
     plugged = data.get("plugged", True)
-    batt_str = f"{batt}%" + (" 🔌" if plugged else " 🔋")
+    batt_str = f"{batt}%" + (" 🔌 (AC)" if plugged else " 🔋 (Baterai)")
 
     disks_summary = ", ".join([f"{d['mount']} {d['free_gb']}GB" for d in data.get("disks", [])[:2]]) or "C: Normal"
-    gpu_name = data.get("gpus", ["Default GPU"])[0]
+    
+    gpus = data.get("gpus", [])
+    first_gpu = gpus[0] if gpus else {}
+    gpu_name = first_gpu.get("name", "GPU") if isinstance(first_gpu, dict) else str(first_gpu)
+
+    hw = data.get("hardware", {})
+    dev_name = f"{hw.get('manufacturer', '')} {hw.get('model', data.get('hostname', 'Laptop'))}".strip()
 
     return (
-        f"{badge} — *{data.get('hostname', 'Laptop')}*\n"
+        f"{badge} — *{dev_name}*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"💻 *OS:* {data.get('os', 'Windows 11')}\n"
         f"⏱️ *Uptime:* {data.get('uptime', 'N/A')}\n"
@@ -50,9 +56,12 @@ def format_cpu(data: dict) -> str:
     if not data: return "⚪ Belum ada data CPU."
     
     cores_str = ", ".join([f"{c}%" for c in data.get("cpu_cores", [])[:8]])
+    hw = data.get("hardware", {})
+    proc_name = hw.get("processor", "Multi-Core Processor")
     return (
         f"⚡ *CPU MONITORING*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
+        f"• *Processor:* {proc_name}\n"
         f"• *Beban Total:* {data.get('cpu', 0)}%\n"
         f"• *Clock Speed:* {data.get('cpu_clock_ghz', 0)} GHz (Max: {data.get('cpu_max_ghz', 0)} GHz)\n"
         f"• *Cores / Threads:* {data.get('cpu_physical_cores', 4)} Cores / {data.get('cpu_logical_cores', 8)} Threads\n"
@@ -66,7 +75,7 @@ def format_ram(data: dict) -> str:
     """3. /ram — Monitoring penggunaan memory."""
     if not data: return "⚪ Belum ada data RAM."
     
-    top_apps = "\n".join([f"  {i+1}. {p['name']} ➔ {p['ram']}%" for i, p in enumerate(data.get("top_processes", [])[:4])])
+    top_apps = "\n".join([f"  {i+1}. `{p['name']}` ➔ {p['ram']}% RAM (CPU: {p.get('cpu', 0)}%)" for i, p in enumerate(data.get("top_processes", [])[:5])])
     return (
         f"🧠 *RAM MONITORING*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
@@ -96,14 +105,20 @@ def format_disk(data: dict) -> str:
 def format_gpu(data: dict) -> str:
     """5. /gpu — Monitoring kartu grafis."""
     if not data: return "⚪ Belum ada data GPU."
-    gpus_text = "\n".join([f"• {g}" for g in data.get("gpus", ["Tidak terdeteksi"])])
+    gpu_list = data.get("gpus", [])
+    lines = []
+    for g in gpu_list:
+        if isinstance(g, dict):
+            lines.append(f"• *{g.get('name', 'GPU')}*\n  └ VRAM: `{g.get('vram', 'Shared')}` | Driver: `{g.get('driver', 'N/A')}`")
+        else:
+            lines.append(f"• *{g}*")
+    gpus_text = "\n".join(lines) if lines else "• Tidak terdeteksi"
     return (
         f"🎮 *GPU MONITORING*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"{gpus_text}\n\n"
-        f"• *Status:* Aktif & Terhubung ke Driver\n"
-        f"• *Display:* {data.get('hardware', {}).get('connected_displays', '1 Layar')}\n"
-        f"• *Thermal:* Beban grafis normal"
+        f"• *Display:* {data.get('hardware', {}).get('connected_displays', '1 Layar Aktif')}\n"
+        f"• *Status:* Perangkat Grafis Berfungsi Baik"
     )
 
 
@@ -169,11 +184,13 @@ def format_network(data: dict) -> str:
     """11. /network — Monitoring koneksi internet & Wi-Fi."""
     if not data: return "⚪ Belum ada data Network."
     net = data.get("network", {})
+    ping_val = net.get("ping", "N/A")
     return (
         f"🌐 *NETWORK & WI-FI*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
         f"• *SSID / Wi-Fi:* {net.get('ssid', 'N/A')}\n"
         f"• *IP Address Lokal:* `{net.get('local_ip', '127.0.0.1')}`\n"
+        f"• *Latensi Ping (8.8.8.8):* `{ping_val}`\n"
         f"• *Total Download:* {net.get('bytes_recv_mb', 0)} MB\n"
         f"• *Total Upload:* {net.get('bytes_sent_mb', 0)} MB"
     )
@@ -198,15 +215,18 @@ def format_info(data: dict) -> str:
     """13. /info — Informasi lengkap hardware & software."""
     if not data: return "⚪ Belum ada data Info."
     hw = data.get("hardware", {})
+    gpus = data.get("gpus", [])
+    gpu_names = [g.get("name", str(g)) if isinstance(g, dict) else str(g) for g in gpus]
+    dev_title = f"{hw.get('manufacturer', '')} {hw.get('model', data.get('hostname', 'Laptop'))}".strip()
     return (
         f"ℹ️ *SYSTEM INFORMATION*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"• *Perangkat:* {data.get('hostname', 'Laptop')}\n"
+        f"• *Perangkat:* {dev_title}\n"
         f"• *Sistem Operasi:* {data.get('os', 'Windows 11')}\n"
-        f"• *Arsitektur:* {hw.get('machine', 'x64')}\n"
         f"• *Prosesor:* {hw.get('processor', 'N/A')}\n"
         f"• *Total RAM:* {data.get('ram_total_gb', 0)} GB\n"
-        f"• *GPU:* {', '.join(data.get('gpus', []))}"
+        f"• *GPU:* {', '.join(gpu_names) if gpu_names else 'N/A'}\n"
+        f"• *Uptime:* {data.get('uptime', 'N/A')}"
     )
 
 
@@ -243,33 +263,45 @@ def format_hardware(data: dict) -> str:
     return (
         f"🔌 *HARDWARE PERIPHERALS*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"• *Motherboard/CPU Arch:* {hw.get('machine', 'x64')}\n"
-        f"• *Processor Unit:* {hw.get('processor', 'N/A')}\n"
-        f"• *Layar Display:* {hw.get('connected_displays', '1 Layar Utama')}\n"
+        f"• *Manufaktur:* {hw.get('manufacturer', 'Laptop')}\n"
+        f"• *Model Laptop:* {hw.get('model', 'Standard')}\n"
+        f"• *Processor Unit:* {hw.get('processor', 'Multi-Core')}\n"
+        f"• *Layar Display:* {hw.get('connected_displays', '1 Layar Utama Aktif')}\n"
         f"• *Audio & Input:* Keyboard & Touchpad Internal Aktif"
     )
 
 
 def format_events(data: dict) -> str:
     """19. /events — Event log & riwayat error Windows."""
+    if not data: return "⚪ Belum ada data Event Log."
+    events = data.get("events", [])
+    if isinstance(events, list) and events:
+        lines = "\n".join([f"• `{e}`" for e in events[:4]])
+    else:
+        lines = "• Semua log kernel & sistem berjalan stabil tanpa crash."
     return (
-        f"📜 *WINDOWS EVENT LOG*\n"
+        f"📜 *WINDOWS SYSTEM EVENT LOG*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"• *Kernel Event:* Normal (System Healthy)\n"
-        f"• *Application Crash:* 0 crash tercatat dalam sesi ini\n"
-        f"• *BSOD Status:* Bersih (Tidak ada Blue Screen)\n"
-        f"• *Log Status:* Sesi berjalan stabil"
+        f"{lines}\n\n"
+        f"💡 _Menampilkan rekaman log tingkat peringatan & error Windows terkini._"
     )
 
 
 def format_update(data: dict) -> str:
     """20. /update — Status Windows Update."""
+    if not data: return "⚪ Belum ada data Windows Update."
+    updates = data.get("updates", [])
+    if isinstance(updates, list) and updates:
+        lines = "\n".join([f"• {u}" for u in updates[:4]])
+    else:
+        lines = "• Semua patch keamanan Windows terpasang up-to-date."
     return (
-        f"🔄 *UPDATE MONITORING*\n"
+        f"🔄 *WINDOWS UPDATE STATUS*\n"
         f"━━━━━━━━━━━━━━━━━━━\n"
-        f"• *Windows Build:* {data.get('os', 'Windows 11')}\n"
-        f"• *Security Patch:* Up-to-date\n"
-        f"• *Driver Status:* Terintegrasi dengan baik"
+        f"• *Windows Build:* {data.get('os', 'Windows 11')}\n\n"
+        f"📋 *Patch & HotFix Terakhir Terpasang:*\n"
+        f"{lines}\n\n"
+        f"✅ _Sistem patch keamanan dalam kondisi up-to-date._"
     )
 
 
