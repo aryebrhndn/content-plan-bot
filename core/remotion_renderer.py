@@ -105,7 +105,8 @@ def render_remotion_video(
 
     is_windows = os.name == "nt"
     xvfb_bin = shutil.which("xvfb-run")
-    if not is_windows and xvfb_bin:
+    xauth_bin = shutil.which("xauth")
+    if not is_windows and xvfb_bin and xauth_bin:
         cmd = [xvfb_bin, "-a", "-s", "-screen 0 1920x1080x24"] + cmd
 
     logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}) ke: {output_mp4_path}")
