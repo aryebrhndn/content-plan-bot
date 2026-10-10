@@ -292,6 +292,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
     rasio (16:9, 1:1, 9:16), dan deteksi topik fleksibel tanpa kaku memaksakan brand.
     """
     import re
+    global last_render_error
     task_id = uuid.uuid4().hex[:8]
     temp_overlay = os.path.join(TEMP_DIR, f"overlay_{task_id}.png")
     temp_video = os.path.join(TEMP_DIR, f"video_{task_id}.mp4")
@@ -427,14 +428,20 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 )
                 remotion_success = True
             except Exception as rem_err:
+                import traceback
+                last_render_error = {
+                    "time": time.time(),
+                    "error": str(rem_err),
+                    "traceback": traceback.format_exc()
+                }
                 logger.warning(f"Remotion render mengalami kendala ({rem_err}). Mengaktifkan fallback graphic engine...", exc_info=True)
                 remotion_success = False
 
         if not remotion_success:
             create_overlay_image(
-                hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
-                points=script_data.get("points", []),
-                cta_text=script_data.get("cta_footer", "Simpan info penting ini!"),
+                hook_text="" if is_clean_footage else script_data.get("hook_header", "IDE KONTEN TERBARU"),
+                points=[] if is_clean_footage else script_data.get("points", []),
+                cta_text="" if is_clean_footage else script_data.get("cta_footer", "Simpan info penting ini!"),
                 output_path=temp_overlay,
                 persona_key=persona_used
             )
@@ -495,7 +502,6 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
 
     except Exception as e:
         import traceback
-        global last_render_error
         err_str = str(e)
         last_render_error = {
             "time": time.time(),
@@ -1021,7 +1027,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v1.7-multiprocess-fallback",
+        "build_version": "v1.8-dockerignore-native-linux",
         "supported_personas": list(PERSONAS.keys())
     }
 
@@ -1030,6 +1036,40 @@ def health_check():
 def get_last_error():
     """Melihat log error render terakhir untuk diagnosa teknis."""
     return last_render_error
+
+
+@app.get("/api/test_remotion")
+def test_remotion():
+    """Menjalankan render uji coba 1-frame Remotion di server untuk diagnosa teknis langsung."""
+    from core.remotion_renderer import render_remotion_video
+    try:
+        test_out = os.path.join(TEMP_DIR, "test_render_api.mp4")
+        res = render_remotion_video(
+            hook_text="PROSESOR CPU 3D",
+            points=["Transistor 3nm", "Arsitektur Efisien"],
+            cta_text="",
+            output_mp4_path=test_out,
+            persona_key="tech_vector",
+            aspect_ratio="landscape",
+            duration_sec=1,
+            is_clean_footage=True,
+            is_alpha_channel=True,
+            timeout=90
+        )
+        return {
+            "status": "ok",
+            "message": "Render Remotion berhasil!",
+            "file": res,
+            "exists": os.path.exists(res),
+            "size": os.path.getsize(res) if os.path.exists(res) else 0
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 @app.post("/api/telemetry")

@@ -72,6 +72,10 @@ PERSONAS["haji"] = PERSONAS["hajidarimuda"]
 PERSONAS["personal"] = PERSONAS["arye"]
 PERSONAS["vector"] = PERSONAS["remotion"]
 PERSONAS["tech"] = PERSONAS["remotion"]
+PERSONAS["tech_vector"] = PERSONAS["remotion"]
+PERSONAS["hardware"] = PERSONAS["remotion"]
+PERSONAS["3d"] = PERSONAS["remotion"]
+
 
 
 def load_style_guide(persona_key: str) -> str:

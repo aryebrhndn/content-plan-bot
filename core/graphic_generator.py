@@ -58,73 +58,72 @@ def create_overlay_image(
     draw = ImageDraw.Draw(overlay)
 
     # 1. KOTAK ATAS (HOOK / JUDUL)
-    top_box_x0, top_box_y0 = 80, 160
-    top_box_x1, top_box_y1 = 1000, 420
-    draw.rounded_rectangle(
-        [top_box_x0, top_box_y0, top_box_x1, top_box_y1],
-        radius=28,
-        fill=theme.get("top_box", "#DC2626")
-    )
+    if hook_text and hook_text.strip():
+        top_box_x0, top_box_y0 = 80, 160
+        top_box_x1, top_box_y1 = 1000, 420
+        draw.rounded_rectangle(
+            [top_box_x0, top_box_y0, top_box_x1, top_box_y1],
+            radius=28,
+            fill=theme.get("top_box", "#DC2626")
+        )
 
-    font_hook = get_font(42)
-    wrapped_hook = textwrap.fill(hook_text, width=28)
-    draw.text(
-        (WIDTH / 2, (top_box_y0 + top_box_y1) / 2),
-        wrapped_hook,
-        font=font_hook,
-        fill=theme.get("text_top", "white"),
-        anchor="mm",
-        align="center"
-    )
+        font_hook = get_font(42)
+        wrapped_hook = textwrap.fill(hook_text, width=28)
+        draw.text(
+            (WIDTH / 2, (top_box_y0 + top_box_y1) / 2),
+            wrapped_hook,
+            font=font_hook,
+            fill=theme.get("text_top", "white"),
+            anchor="mm",
+            align="center"
+        )
 
     # 2. KOTAK TENGAH (POIN-POIN MATERI)
-    mid_box_x0, mid_box_y0 = 80, 470
-    mid_box_x1, mid_box_y1 = 1000, 1400
-    draw.rounded_rectangle(
-        [mid_box_x0, mid_box_y0, mid_box_x1, mid_box_y1],
-        radius=32,
-        fill=theme.get("mid_box", "#FFFFFF")
-    )
-
-    font_points = get_font(32)
-    available_points = points if points else ["• Poin materi 1", "• Poin materi 2"]
-    
-    # Hitung jarak antar baris secara dinamis
-    y_cursor = mid_box_y0 + 70
-    total_space = (mid_box_y1 - mid_box_y0) - 140
-    line_spacing = max(total_space / len(available_points), 100)
-
-    for pt in available_points:
-        # Tambahkan simbol bullet jika belum ada
-        formatted_pt = pt if pt.strip().startswith(("•", "-", "*")) else f"• {pt}"
-        wrapped_pt = textwrap.fill(formatted_pt, width=34)
-        draw.text(
-            (mid_box_x0 + 50, y_cursor),
-            wrapped_pt,
-            font=font_points,
-            fill=theme.get("text_mid", "#1E293B")
+    if points and len(points) > 0:
+        mid_box_x0, mid_box_y0 = 80, 470
+        mid_box_x1, mid_box_y1 = 1000, 1400
+        draw.rounded_rectangle(
+            [mid_box_x0, mid_box_y0, mid_box_x1, mid_box_y1],
+            radius=32,
+            fill=theme.get("mid_box", "#FFFFFF")
         )
-        y_cursor += line_spacing
+
+        font_points = get_font(32)
+        y_cursor = mid_box_y0 + 70
+        total_space = (mid_box_y1 - mid_box_y0) - 140
+        line_spacing = max(total_space / len(points), 100)
+
+        for pt in points:
+            formatted_pt = pt if pt.strip().startswith(("•", "-", "*")) else f"• {pt}"
+            wrapped_pt = textwrap.fill(formatted_pt, width=34)
+            draw.text(
+                (mid_box_x0 + 50, y_cursor),
+                wrapped_pt,
+                font=font_points,
+                fill=theme.get("text_mid", "#1E293B")
+            )
+            y_cursor += line_spacing
 
     # 3. KOTAK BAWAH (CTA / CALL TO ACTION)
-    bot_box_x0, bot_box_y0 = 80, 1450
-    bot_box_x1, bot_box_y1 = 1000, 1650
-    draw.rounded_rectangle(
-        [bot_box_x0, bot_box_y0, bot_box_x1, bot_box_y1],
-        radius=28,
-        fill=theme.get("bot_box", "#DC2626")
-    )
+    if cta_text and cta_text.strip():
+        bot_box_x0, bot_box_y0 = 80, 1450
+        bot_box_x1, bot_box_y1 = 1000, 1650
+        draw.rounded_rectangle(
+            [bot_box_x0, bot_box_y0, bot_box_x1, bot_box_y1],
+            radius=28,
+            fill=theme.get("bot_box", "#DC2626")
+        )
 
-    font_cta = get_font(34)
-    wrapped_cta = textwrap.fill(cta_text, width=32)
-    draw.text(
-        (WIDTH / 2, (bot_box_y0 + bot_box_y1) / 2),
-        wrapped_cta,
-        font=font_cta,
-        fill=theme.get("text_bot", "white"),
-        anchor="mm",
-        align="center"
-    )
+        font_cta = get_font(34)
+        wrapped_cta = textwrap.fill(cta_text, width=32)
+        draw.text(
+            (WIDTH / 2, (bot_box_y0 + bot_box_y1) / 2),
+            wrapped_cta,
+            font=font_cta,
+            fill=theme.get("text_bot", "white"),
+            anchor="mm",
+            align="center"
+        )
 
     # Pastikan folder tujuan ada
     os.makedirs(os.path.dirname(os.path.abspath(output_path)), exist_ok=True)
