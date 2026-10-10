@@ -103,10 +103,14 @@ def render_remotion_video(
             npx_bin = shutil.which("npx") or "npx"
             cmd = [npx_bin, "remotion"] + common_args
 
+    is_windows = os.name == "nt"
+    xvfb_bin = shutil.which("xvfb-run")
+    if not is_windows and xvfb_bin:
+        cmd = [xvfb_bin, "-a", "-s", "-screen 0 1920x1080x24"] + cmd
+
     logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}) ke: {output_mp4_path}")
     
     try:
-        is_windows = os.name == "nt"
         res = subprocess.run(
             cmd if not is_windows else " ".join(f'"{c}"' if " " in c else c for c in cmd),
             cwd=base_dir,
