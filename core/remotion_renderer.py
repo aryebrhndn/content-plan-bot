@@ -90,7 +90,7 @@ def render_remotion_video(
         f"--gl={gl_renderer}",
         "--concurrency=1",
         "--enable-multiprocess-on-linux",
-        "--log=info"
+        "--log=verbose"
     ]
 
     if os.path.exists(cli_js):
@@ -119,7 +119,7 @@ def render_remotion_video(
         if res.returncode != 0:
             err_output = (res.stderr or res.stdout or "").strip()
             logger.error(f"Gagal render Remotion (code {res.returncode}):\n{err_output}")
-            raise RuntimeError(f"Remotion render error (code {res.returncode}): {err_output[:400]}")
+            raise RuntimeError(f"Remotion render error (code {res.returncode}): {err_output[:3000]}")
 
         # Jika ada audio yang dilampirkan, gabungkan ke MP4 menggunakan ffmpeg
         if audio_path and os.path.exists(audio_path) and os.path.exists(output_mp4_path):

@@ -1027,7 +1027,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v1.8-dockerignore-native-linux",
+        "build_version": "v1.9-verbose-diag",
         "supported_personas": list(PERSONAS.keys())
     }
 
@@ -1070,6 +1070,32 @@ def test_remotion():
             "error": str(e),
             "traceback": traceback.format_exc()
         }
+
+
+@app.get("/api/diag")
+def get_diag():
+    """Diagnosa kondisi browser Chromium dan file sistem di server cloud."""
+    import shutil, subprocess
+    res = {}
+    res["has_usr_bin_chromium"] = os.path.exists("/usr/bin/chromium")
+    res["which_chromium"] = shutil.which("chromium")
+    res["which_node"] = shutil.which("node")
+    res["remotion_cache_dir"] = os.listdir("/app/node_modules/.remotion") if os.path.exists("/app/node_modules/.remotion") else None
+    
+    try:
+        r_ver = subprocess.run(["chromium", "--version"], capture_output=True, text=True, timeout=5)
+        res["chromium_version"] = r_ver.stdout.strip()
+    except Exception as e:
+        res["chromium_version_err"] = str(e)
+
+    try:
+        r_run = subprocess.run(["chromium", "--headless", "--no-sandbox", "--disable-gpu", "--dump-dom", "about:blank"], capture_output=True, text=True, timeout=5)
+        res["chromium_run_code"] = r_run.returncode
+        res["chromium_run_stderr"] = r_run.stderr[:300]
+    except Exception as e:
+        res["chromium_run_err"] = str(e)
+
+    return res
 
 
 @app.post("/api/telemetry")
