@@ -70,25 +70,41 @@ def render_remotion_video(
     with open(props_json_path, "w", encoding="utf-8") as f:
         json.dump(props_data, f, ensure_ascii=False, indent=2)
 
-    entry_point = "remotion/index.ts"
-    npx_bin = shutil.which("npx") or "npx"
-
+    base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    entry_point = os.path.join(base_dir, "remotion", "index.ts")
+    
+    local_bin = os.path.join(base_dir, "node_modules", ".bin", "remotion")
     total_frames = max(90, min(1800, int((duration_sec or 12) * 30)))
     gl_renderer = "angle" if os.name == "nt" else "swangle"
-    cmd = [
-        npx_bin,
-        "--no-install",
-        "remotion",
-        "render",
-        entry_point,
-        comp_id,
-        output_mp4_path,
-        f"--props={props_json_path}",
-        f"--frames=0-{total_frames - 1}",
-        f"--gl={gl_renderer}",
-        "--concurrency=1",
-        "--log=info"
-    ]
+
+    if os.path.exists(local_bin):
+        cmd = [
+            local_bin,
+            "render",
+            entry_point,
+            comp_id,
+            output_mp4_path,
+            f"--props={props_json_path}",
+            f"--frames=0-{total_frames - 1}",
+            f"--gl={gl_renderer}",
+            "--concurrency=1",
+            "--log=info"
+        ]
+    else:
+        npx_bin = shutil.which("npx") or "npx"
+        cmd = [
+            npx_bin,
+            "remotion",
+            "render",
+            entry_point,
+            comp_id,
+            output_mp4_path,
+            f"--props={props_json_path}",
+            f"--frames=0-{total_frames - 1}",
+            f"--gl={gl_renderer}",
+            "--concurrency=1",
+            "--log=info"
+        ]
 
     logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Style: {style_variant}) ke: {output_mp4_path}")
     
@@ -96,6 +112,7 @@ def render_remotion_video(
         is_windows = os.name == "nt"
         res = subprocess.run(
             cmd if not is_windows else " ".join(f'"{c}"' if " " in c else c for c in cmd),
+            cwd=base_dir,
             shell=is_windows,
             capture_output=True,
             text=True,
@@ -103,8 +120,9 @@ def render_remotion_video(
         )
 
         if res.returncode != 0:
-            logger.error(f"Gagal render Remotion (code {res.returncode}):\n{res.stderr}\n{res.stdout}")
-            raise RuntimeError(f"Remotion render error: {res.stderr[:300] or res.stdout[:300]}")
+            err_output = (res.stderr or res.stdout or "").strip()
+            logger.error(f"Gagal render Remotion (code {res.returncode}):\n{err_output}")
+            raise RuntimeError(f"Remotion render error (code {res.returncode}): {err_output[:400]}")
 
         # Jika ada audio yang dilampirkan, gabungkan ke MP4 menggunakan ffmpeg
         if audio_path and os.path.exists(audio_path) and os.path.exists(output_mp4_path):

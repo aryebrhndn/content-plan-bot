@@ -482,7 +482,14 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             )
 
     except Exception as e:
+        import traceback
+        global last_render_error
         err_str = str(e)
+        last_render_error = {
+            "time": time.time(),
+            "error": err_str,
+            "traceback": traceback.format_exc()
+        }
         logger.error(f"Gagal membuat video: {err_str}", exc_info=True)
         if "timed out" in err_str.lower():
             friendly_err = (
@@ -497,8 +504,8 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             friendly_err = (
                 "⚠️ *Gagal Memproses Video*\n"
                 "━━━━━━━━━━━━━━━━━━━\n"
-                "Terjadi kendala teknis saat me-render komposisi visual.\n\n"
-                "💡 *Saran:* Silakan periksa format perintah atau coba topik video lain."
+                f"📍 *Penyebab:* `{err_str[:250]}`\n\n"
+                "💡 *Saran:* Silakan coba topik video lain atau periksa konfigurasi render."
             )
         if progress_msg_id:
             edit_telegram_sync(chat_id, progress_msg_id, friendly_err)
@@ -993,15 +1000,24 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
     return
 
 
+last_render_error = {}
+
+
 @app.get("/")
 def health_check():
     """Digunakan oleh UptimeRobot agar Hugging Face Spaces tidak tidur (Keep-alive)."""
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v1.4-swangle-fast",
+        "build_version": "v1.5-cwd-direct-bin",
         "supported_personas": list(PERSONAS.keys())
     }
+
+
+@app.get("/api/last_error")
+def get_last_error():
+    """Melihat log error render terakhir untuk diagnosa teknis."""
+    return last_render_error
 
 
 @app.post("/api/telemetry")
