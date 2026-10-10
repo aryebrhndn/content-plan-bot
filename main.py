@@ -1030,7 +1030,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v2.1-xvfb-xauth",
+        "build_version": "v2.2-swangle-clean",
         "supported_personas": list(PERSONAS.keys())
     }
 
