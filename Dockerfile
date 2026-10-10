@@ -27,6 +27,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     libxi6 \
     libxtst6 \
     libxss1 \
+    libgl1 \
+    libgl1-mesa-dri \
     && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
     && apt-get install -y nodejs \
     && rm -rf /var/lib/apt/lists/*

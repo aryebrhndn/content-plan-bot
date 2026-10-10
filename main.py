@@ -408,22 +408,29 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         style_variant = script_data.get("style_variant", "regular")
         user_audio = user_uploaded_audio.get(chat_id, "")
 
+        remotion_success = False
         if engine == "remotion" and is_remotion_available():
-            render_remotion_video(
-                hook_text=script_data.get("hook_header", ""),
-                points=script_data.get("points", []),
-                cta_text=script_data.get("cta_footer", ""),
-                output_mp4_path=temp_video,
-                persona_key=persona_used,
-                aspect_ratio=aspect_ratio,
-                brand_badge=brand_badge,
-                duration_sec=actual_duration,
-                is_clean_footage=is_clean_footage,
-                is_alpha_channel=is_alpha_channel,
-                style_variant=style_variant,
-                audio_path=user_audio
-            )
-        else:
+            try:
+                render_remotion_video(
+                    hook_text=script_data.get("hook_header", ""),
+                    points=script_data.get("points", []),
+                    cta_text=script_data.get("cta_footer", ""),
+                    output_mp4_path=temp_video,
+                    persona_key=persona_used,
+                    aspect_ratio=aspect_ratio,
+                    brand_badge=brand_badge,
+                    duration_sec=actual_duration,
+                    is_clean_footage=is_clean_footage,
+                    is_alpha_channel=is_alpha_channel,
+                    style_variant=style_variant,
+                    audio_path=user_audio
+                )
+                remotion_success = True
+            except Exception as rem_err:
+                logger.warning(f"Remotion render mengalami kendala ({rem_err}). Mengaktifkan fallback graphic engine...", exc_info=True)
+                remotion_success = False
+
+        if not remotion_success:
             create_overlay_image(
                 hook_text=script_data.get("hook_header", "IDE KONTEN TERBARU"),
                 points=script_data.get("points", []),
@@ -1014,7 +1021,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v1.6-robust-remotion",
+        "build_version": "v1.7-multiprocess-fallback",
         "supported_personas": list(PERSONAS.keys())
     }
 

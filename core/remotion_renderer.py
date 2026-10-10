@@ -78,7 +78,7 @@ def render_remotion_video(
     node_bin = shutil.which("node") or "node"
     
     total_frames = max(90, min(1800, int((duration_sec or 8) * 30)))
-    gl_renderer = "angle" if os.name == "nt" else "swangle"
+    gl_renderer = "angle"
 
     common_args = [
         "render",
@@ -89,6 +89,7 @@ def render_remotion_video(
         f"--frames=0-{total_frames - 1}",
         f"--gl={gl_renderer}",
         "--concurrency=1",
+        "--enable-multiprocess-on-linux",
         "--log=info"
     ]
 

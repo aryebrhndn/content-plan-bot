@@ -2,15 +2,14 @@ import { Config } from '@remotion/cli/config';
 import fs from 'node:fs';
 
 Config.setVideoImageFormat('jpeg');
-// Di Windows gunakan 'angle', di Linux headless/Docker tanpa GPU gunakan 'swangle' (SwiftShader)
-Config.setChromiumOpenGlRenderer(process.platform === 'win32' ? 'angle' : 'swangle');
+Config.setChromiumOpenGlRenderer('angle');
 Config.setConcurrency(1);
 Config.setChromiumDisableWebSecurity(true);
 Config.setChromiumIgnoreCertificateErrors(true);
 
-// Di Linux container / Railway, gunakan single process untuk keandalan memori
+// Di Linux container / Railway, WAJIB aktifkan multi-process agar Chrome tab tidak crash (Page crashed!)
 if (process.platform === 'linux') {
-  Config.setChromiumMultiProcessOnLinux(false);
+  Config.setChromiumMultiProcessOnLinux(true);
   // Jika headless-shell tidak ditemukan namun /usr/bin/chromium ada di sistem, gunakan browser sistem
   if (fs.existsSync('/usr/bin/chromium')) {
     const localShell = '/app/node_modules/.remotion/chrome-headless-shell';
