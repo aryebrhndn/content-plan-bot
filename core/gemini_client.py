@@ -7,11 +7,8 @@ from config import GEMINI_API_KEY
 
 logger = logging.getLogger(__name__)
 
-# Daftar model dengan auto-fallback
+# Daftar model resmi aktif dengan respons cepat
 GEMINI_MODELS = [
-    "gemini-3.5-flash",
-    "gemini-3.8-flash",
-    "gemini-3.7-flash",
     "gemini-3.6-flash"
 ]
 
@@ -45,7 +42,7 @@ PERSONAS = {
     },
     "remotion": {
         "name": "Remotion Motion Graphics",
-        "guide_file": "remotion/TechVectorReels.tsx",
+        "guide_file": "remotion_style_guide.md",
         "description": "Motion Graphics & 3D Vector Hardware (Footage B-Roll bersih / Infografis, 16:9 Lanskap, 1:1, 9:16)",
         "theme_colors": {
             "top_box": "#0A0F1D",
@@ -217,9 +214,12 @@ def chat_with_gemini(user_message: str, persona_key: str = "remotion") -> str:
 Acuan Tambahan:
 {guide_content[:1500] if guide_content else ''}
 
-Tugasmu:
-Jawab pertanyaan/pesan pengguna dengan cerdas, informatif, dan mengalir natural.
-Jika relevan di akhir jawaban, kamu boleh memberi saran singkat: 'Kalau kamu mau buatkan video animasinya, kasih tahu aja formatnya (16:9 lanskap / 9:16 potret / 1:1) atau bisa kirim audio MP3 pendukung!' namun utamakan menjawab inti pertanyaannya dengan tuntas terlebih dahulu."""
+PEDOMAN FORMAT JAWABAN (SANGAT PENTING):
+1. Format Percakapan Telegram: Berikan jawaban dalam teks bahasa Indonesia yang ramah, mengalir natural, cerdas, dan tertata rapi.
+2. DILARANG KERAS MENGELUARKAN KODE SUMBER MENTAH (seperti React TSX, JSX, HTML, CSS, JavaScript, atau dump JSON data) KECUALI jika pengguna secara terang-terangan dan spesifik meminta contoh kode pemrograman!
+3. Jangan pernah membungkus seluruh jawaban dalam blok kode markdown (```). Gunakan teks biasa dengan styling Markdown Telegram standar (*tebal*, _miring_, bullet points `•`).
+4. Jika menjelaskan beberapa poin, gunakan bullet points (`•`) ringkas dengan spasi paragraf yang bersih sehingga nyaman dibaca di layar smartphone.
+5. Jawab pertanyaan pengguna secara tuntas dan to the point. Jika relevan di penutup, kamu boleh memberi saran singkat terkait opsi video atau audio, tapi utamakan menjawab inti pertanyaannya terlebih dahulu."""
 
     try:
         payload = {

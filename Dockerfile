@@ -33,7 +33,7 @@ RUN pip install --no-cache-dir --upgrade pip && \
 # Salin dan install dependencies Node.js & Remotion
 COPY package*.json ./
 RUN npm install --no-audit && \
-    npx remotion browser ensure
+    (npx remotion browser ensure || true)
 
 # Salin seluruh kode proyek
 COPY . .

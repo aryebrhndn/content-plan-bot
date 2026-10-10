@@ -482,11 +482,28 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             )
 
     except Exception as e:
-        logger.error(f"Gagal membuat video: {e}", exc_info=True)
-        if progress_msg_id:
-            edit_telegram_sync(chat_id, progress_msg_id, f"❌ Terjadi kendala saat proses render: {str(e)}")
+        err_str = str(e)
+        logger.error(f"Gagal membuat video: {err_str}", exc_info=True)
+        if "timed out" in err_str.lower():
+            friendly_err = (
+                "⚠️ *Proses Render Melewati Batas Waktu (Timeout)*\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "Server cloud sedang menangani antrean beban komputasi tinggi.\n\n"
+                "💡 *Tips Cepat Berhasil:*\n"
+                "• Coba gunakan durasi lebih ringkas (contoh: 6 atau 8 detik)\n"
+                "• Atau gunakan rasio potret sosmed: `/render 9:16 potret topik: ...`"
+            )
         else:
-            send_telegram_sync(chat_id, f"❌ Terjadi kendala saat proses render: {str(e)}")
+            friendly_err = (
+                "⚠️ *Gagal Memproses Video*\n"
+                "━━━━━━━━━━━━━━━━━━━\n"
+                "Terjadi kendala teknis saat me-render komposisi visual.\n\n"
+                "💡 *Saran:* Silakan periksa format perintah atau coba topik video lain."
+            )
+        if progress_msg_id:
+            edit_telegram_sync(chat_id, progress_msg_id, friendly_err)
+        else:
+            send_telegram_sync(chat_id, friendly_err)
 
     finally:
         for path in (temp_overlay, temp_video):
@@ -982,6 +999,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
+        "build_version": "v1.4-swangle-fast",
         "supported_personas": list(PERSONAS.keys())
     }
 
