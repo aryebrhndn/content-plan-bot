@@ -349,7 +349,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             elif any(k in lower_prompt for k in ["microstock", "stock", "shutterstock", "adobe stock"]):
                 resolved_persona = "tech_vector"
             else:
-                resolved_persona = "arye" if is_tech else "tech_vector"
+                resolved_persona = "tech_vector" if is_tech else "arye"
 
         # Tahap 1: 10% (Kirim pesan progres awal)
         init_text = (
@@ -438,6 +438,9 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 remotion_success = False
 
         if not remotion_success:
+            if engine == "remotion" or persona_used in ["tech_vector", "hardware", "vector", "3d", "remotion"]:
+                err_msg = last_render_error.get("error", "Remotion render error")
+                raise RuntimeError(f"Gagal memproses video Remotion: {err_msg}")
             create_overlay_image(
                 hook_text="" if is_clean_footage else script_data.get("hook_header", "IDE KONTEN TERBARU"),
                 points=[] if is_clean_footage else script_data.get("points", []),
@@ -1039,7 +1042,7 @@ def get_last_error():
 
 
 @app.get("/api/test_remotion")
-def test_remotion():
+def test_remotion(gl: str = "", use_xvfb: bool = False, scale: float = 0.5):
     """Menjalankan render uji coba 1-frame Remotion di server untuk diagnosa teknis langsung."""
     from core.remotion_renderer import render_remotion_video
     try:
@@ -1054,7 +1057,10 @@ def test_remotion():
             duration_sec=1,
             is_clean_footage=True,
             is_alpha_channel=True,
-            timeout=90
+            timeout=90,
+            custom_gl=gl,
+            use_xvfb=use_xvfb,
+            scale=scale
         )
         return {
             "status": "ok",

@@ -28,7 +28,10 @@ def render_remotion_video(
     is_alpha_channel: bool = False,
     style_variant: str = "regular",
     audio_path: str = "",
-    timeout: int = 300
+    timeout: int = 300,
+    custom_gl: str = "",
+    use_xvfb: bool = False,
+    scale: float = 0.5
 ) -> str:
     """
     Merender video animasi menggunakan Remotion (React & TypeScript).
@@ -78,7 +81,8 @@ def render_remotion_video(
     node_bin = shutil.which("node") or "node"
     
     total_frames = max(90, min(1800, int((duration_sec or 8) * 30)))
-    gl_renderer = "angle"
+    is_windows = os.name == "nt"
+    gl_renderer = custom_gl if custom_gl else ("angle" if is_windows else "swangle")
 
     common_args = [
         "render",
@@ -89,12 +93,16 @@ def render_remotion_video(
         f"--frames=0-{total_frames - 1}",
         f"--gl={gl_renderer}",
         "--concurrency=1",
-        "--enable-multiprocess-on-linux",
+        "--disable-shared-memory-capture",
+        f"--scale={scale}",
         "--log=verbose"
     ]
+    if not is_windows:
+        common_args.append("--enable-multiprocess-on-linux")
 
+    node_opts = ["--max-old-space-size=256"]
     if os.path.exists(cli_js):
-        cmd = [node_bin, cli_js] + common_args
+        cmd = [node_bin] + node_opts + [cli_js] + common_args
     else:
         local_bin = os.path.join(base_dir, "node_modules", ".bin", "remotion")
         if os.path.exists(local_bin):
@@ -103,13 +111,13 @@ def render_remotion_video(
             npx_bin = shutil.which("npx") or "npx"
             cmd = [npx_bin, "remotion"] + common_args
 
-    is_windows = os.name == "nt"
-    xvfb_bin = shutil.which("xvfb-run")
-    xauth_bin = shutil.which("xauth")
-    if not is_windows and xvfb_bin and xauth_bin:
-        cmd = [xvfb_bin, "-a", "-s", "-screen 0 1920x1080x24"] + cmd
+    if not is_windows and use_xvfb:
+        xvfb_bin = shutil.which("xvfb-run")
+        xauth_bin = shutil.which("xauth")
+        if xvfb_bin and xauth_bin:
+            cmd = [xvfb_bin, "-a", "-s", "-screen 0 1280x720x16"] + cmd
 
-    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}) ke: {output_mp4_path}")
+    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}, Scale: {scale}, Xvfb: {use_xvfb}) ke: {output_mp4_path}")
     
     try:
         res = subprocess.run(
