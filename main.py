@@ -302,8 +302,12 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
 
         # Deteksi Durasi yang diminta pengguna (misal: "8 detik", "15 sec")
         duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
-        target_duration = int(duration_match.group(1)) if duration_match else 12
+        default_dur = 8 if (persona_key in ["remotion", "tech_vector", "vector"] or "remotion" in lower_prompt) else 12
+        target_duration = int(duration_match.group(1)) if duration_match else default_dur
         target_duration = max(5, min(60, target_duration))
+
+        # Deteksi permintaan Alpha Channel transparan
+        is_alpha_channel = any(k in lower_prompt for k in ["alpha", "transparan", "transparent"])
 
         # Deteksi Aspect Ratio (Mendukung ejaan Inggris & Indonesia: lanskap, lebar, tidur)
         if any(k in lower_prompt for k in ["lanskap", "landscape", "horizontal", "16:9", "lebar", "tidur", "youtube", "desktop"]):
@@ -415,6 +419,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 brand_badge=brand_badge,
                 duration_sec=actual_duration,
                 is_clean_footage=is_clean_footage,
+                is_alpha_channel=is_alpha_channel,
                 style_variant=style_variant,
                 audio_path=user_audio
             )
@@ -1009,7 +1014,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v1.5-cwd-direct-bin",
+        "build_version": "v1.6-robust-remotion",
         "supported_personas": list(PERSONAS.keys())
     }
 

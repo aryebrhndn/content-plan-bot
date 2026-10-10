@@ -23,8 +23,9 @@ def render_remotion_video(
     persona_key: str = "hajidarimuda",
     aspect_ratio: str = "portrait",
     brand_badge: str = "",
-    duration_sec: int = 12,
+    duration_sec: int = 8,
     is_clean_footage: bool = False,
+    is_alpha_channel: bool = False,
     style_variant: str = "regular",
     audio_path: str = "",
     timeout: int = 300
@@ -32,7 +33,7 @@ def render_remotion_video(
     """
     Merender video animasi menggunakan Remotion (React & TypeScript).
     Mendukung kustomisasi rasio, durasi, Clean Footage Mode (B-roll murni tanpa kartu teks),
-    dan variasi style (regular vs papercut Daviqin):
+    Alpha Channel transparan, dan variasi style (regular vs papercut Daviqin):
     - portrait (9:16 - 1080x1920) untuk Reels/Shorts/TikTok
     - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Footage
     - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
@@ -64,6 +65,7 @@ def render_remotion_video(
         "brand_badge": brand_badge,
         "duration_sec": duration_sec,
         "is_clean_footage": is_clean_footage,
+        "is_alpha_channel": is_alpha_channel,
         "style_variant": style_variant
     }
 
@@ -72,41 +74,35 @@ def render_remotion_video(
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     entry_point = os.path.join(base_dir, "remotion", "index.ts")
+    cli_js = os.path.join(base_dir, "node_modules", "@remotion", "cli", "remotion-cli.js")
+    node_bin = shutil.which("node") or "node"
     
-    local_bin = os.path.join(base_dir, "node_modules", ".bin", "remotion")
-    total_frames = max(90, min(1800, int((duration_sec or 12) * 30)))
+    total_frames = max(90, min(1800, int((duration_sec or 8) * 30)))
     gl_renderer = "angle" if os.name == "nt" else "swangle"
 
-    if os.path.exists(local_bin):
-        cmd = [
-            local_bin,
-            "render",
-            entry_point,
-            comp_id,
-            output_mp4_path,
-            f"--props={props_json_path}",
-            f"--frames=0-{total_frames - 1}",
-            f"--gl={gl_renderer}",
-            "--concurrency=1",
-            "--log=info"
-        ]
-    else:
-        npx_bin = shutil.which("npx") or "npx"
-        cmd = [
-            npx_bin,
-            "remotion",
-            "render",
-            entry_point,
-            comp_id,
-            output_mp4_path,
-            f"--props={props_json_path}",
-            f"--frames=0-{total_frames - 1}",
-            f"--gl={gl_renderer}",
-            "--concurrency=1",
-            "--log=info"
-        ]
+    common_args = [
+        "render",
+        entry_point,
+        comp_id,
+        output_mp4_path,
+        f"--props={props_json_path}",
+        f"--frames=0-{total_frames - 1}",
+        f"--gl={gl_renderer}",
+        "--concurrency=1",
+        "--log=info"
+    ]
 
-    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Style: {style_variant}) ke: {output_mp4_path}")
+    if os.path.exists(cli_js):
+        cmd = [node_bin, cli_js] + common_args
+    else:
+        local_bin = os.path.join(base_dir, "node_modules", ".bin", "remotion")
+        if os.path.exists(local_bin):
+            cmd = [local_bin] + common_args
+        else:
+            npx_bin = shutil.which("npx") or "npx"
+            cmd = [npx_bin, "remotion"] + common_args
+
+    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}) ke: {output_mp4_path}")
     
     try:
         is_windows = os.name == "nt"

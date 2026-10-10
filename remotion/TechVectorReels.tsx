@@ -14,6 +14,7 @@ export interface TechVectorReelsProps {
   brand_badge?: string;
   duration_sec?: number;
   is_clean_footage?: boolean;
+  is_alpha_channel?: boolean;
 }
 
 export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
@@ -21,7 +22,8 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
   points = [],
   cta_footer,
   brand_badge,
-  is_clean_footage = false
+  is_clean_footage = false,
+  is_alpha_channel = false
 }) => {
   const frame = useCurrentFrame();
   const { fps, width, height } = useVideoConfig();
@@ -177,10 +179,12 @@ export const TechVectorReels: React.FC<TechVectorReelsProps> = ({
     const cameraZoom = interpolate(frame, [0, fps * 15], [1, 1.08]);
     const cameraRotate = interpolate(frame, [0, fps * 15], [0, 1.5]);
 
+    const isAlpha = Boolean(is_alpha_channel || (hook_header && /alpha|transparan/i.test(hook_header)));
+
     return (
       <AbsoluteFill
         style={{
-          background: 'radial-gradient(ellipse at center, #0B132B 0%, #030611 100%)',
+          background: isAlpha ? 'transparent' : 'radial-gradient(ellipse at center, #0B132B 0%, #030611 100%)',
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
