@@ -27,7 +27,7 @@ def render_remotion_video(
     is_clean_footage: bool = False,
     style_variant: str = "regular",
     audio_path: str = "",
-    timeout: int = 150
+    timeout: int = 300
 ) -> str:
     """
     Merender video animasi menggunakan Remotion (React & TypeScript).
@@ -74,6 +74,7 @@ def render_remotion_video(
     npx_bin = shutil.which("npx") or "npx"
 
     total_frames = max(90, min(1800, int((duration_sec or 12) * 30)))
+    gl_renderer = "angle" if os.name == "nt" else "swangle"
     cmd = [
         npx_bin,
         "--no-install",
@@ -84,7 +85,8 @@ def render_remotion_video(
         output_mp4_path,
         f"--props={props_json_path}",
         f"--frames=0-{total_frames - 1}",
-        "--gl=angle",
+        f"--gl={gl_renderer}",
+        "--concurrency=1",
         "--log=info"
     ]
 

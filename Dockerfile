@@ -32,14 +32,15 @@ RUN pip install --no-cache-dir --upgrade pip && \
 
 # Salin dan install dependencies Node.js & Remotion
 COPY package*.json ./
-RUN npm install --no-audit
+RUN npm install --no-audit && \
+    npx remotion browser ensure
 
 # Salin seluruh kode proyek
 COPY . .
 
 # Buat direktori temp & aset serta berikan izin akses ke appuser
-RUN mkdir -p /app/temp /app/assets/fonts /app/assets/footages && \
-    chown -R appuser:appuser /app
+RUN mkdir -p /app/temp /app/assets/fonts /app/assets/footages /home/appuser/.cache && \
+    chown -R appuser:appuser /app /home/appuser
 
 USER appuser
 
