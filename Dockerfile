@@ -62,6 +62,9 @@ USER appuser
 # Unduh Chrome Headless Shell Remotion sebagai appuser
 RUN npx remotion browser ensure || true
 
+# Pre-bundle Remotion agar tidak makan RAM / compile Webpack saat runtime
+RUN npx remotion bundle remotion/index.ts --out-dir=/app/remotion-bundle || true
+
 # Hugging Face Spaces port default adalah 7860
 EXPOSE 7860
 

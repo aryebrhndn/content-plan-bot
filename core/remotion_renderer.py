@@ -76,7 +76,8 @@ def render_remotion_video(
         json.dump(props_data, f, ensure_ascii=False, indent=2)
 
     base_dir = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
-    entry_point = os.path.join(base_dir, "remotion", "index.ts")
+    bundle_dir = os.path.join(base_dir, "remotion-bundle")
+    entry_point = bundle_dir if os.path.exists(bundle_dir) else os.path.join(base_dir, "remotion", "index.ts")
     cli_js = os.path.join(base_dir, "node_modules", "@remotion", "cli", "remotion-cli.js")
     node_bin = shutil.which("node") or "node"
     
@@ -100,9 +101,8 @@ def render_remotion_video(
     if not is_windows:
         common_args.append("--enable-multiprocess-on-linux")
 
-    node_opts = ["--max-old-space-size=256"]
     if os.path.exists(cli_js):
-        cmd = [node_bin] + node_opts + [cli_js] + common_args
+        cmd = [node_bin, cli_js] + common_args
     else:
         local_bin = os.path.join(base_dir, "node_modules", ".bin", "remotion")
         if os.path.exists(local_bin):
