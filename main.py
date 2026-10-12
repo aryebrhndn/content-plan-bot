@@ -1177,7 +1177,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v2.6-daviqin-assets-complete",
+        "build_version": "v2.7-daviqin-dynamic-multiscene",
         "supported_personas": list(PERSONAS.keys())
     }
 
