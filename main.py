@@ -82,8 +82,23 @@ laptop_telemetry_data: Dict = {}
 pending_remote_actions: List[Dict] = []
 last_screenshot_chat_id: int = None
 
-# Penyimpanan path file audio yang dilampirkan pengguna per chat_id
-user_uploaded_audio: Dict[int, str] = {}
+# Penyimpanan path & metadata file audio yang dilampirkan pengguna per chat_id
+user_uploaded_audio: Dict[int, Any] = {}
+
+def get_audio_duration_sec(file_path: str, fallback_duration: int = 0) -> int:
+    """Mendapatkan durasi file audio (dalam detik) menggunakan ffprobe atau fallback metadata."""
+    if fallback_duration and fallback_duration > 0:
+        return int(round(fallback_duration))
+    if file_path and os.path.exists(file_path):
+        ffprobe_bin = shutil.which("ffprobe") or "ffprobe"
+        try:
+            cmd = [ffprobe_bin, "-v", "error", "-show_entries", "format=duration", "-of", "default=noprint_wrappers=1:nokey=1", file_path]
+            res = subprocess.run(cmd, capture_output=True, text=True, timeout=5)
+            if res.returncode == 0 and res.stdout.strip():
+                return int(round(float(res.stdout.strip())))
+        except Exception:
+            pass
+    return int(round(fallback_duration or 0))
 
 
 async def download_telegram_file(file_id: str, output_path: str) -> bool:
@@ -321,16 +336,46 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
     try:
         lower_prompt = user_prompt.lower()
 
+        # Cek apakah ada file audio yang dilampirkan oleh pengguna
+        audio_info = user_uploaded_audio.get(chat_id)
+        user_audio_path = ""
+        user_audio_dur = 0
+        if isinstance(audio_info, dict):
+            user_audio_path = audio_info.get("path", "")
+            user_audio_dur = audio_info.get("duration", 0)
+        elif isinstance(audio_info, str):
+            user_audio_path = audio_info
+
+        if user_audio_path and os.path.exists(user_audio_path) and not user_audio_dur:
+            user_audio_dur = get_audio_duration_sec(user_audio_path)
+
+        # Deteksi Master Template Daviqin Paper Cutout
+        is_daviqin_master = any(k in lower_prompt for k in [
+            "daviqin", "daviqinvid1", "folder daviqin", "foder daviqin", "template daviqin", "kesyirikan"
+        ])
+        is_papercut = is_daviqin_master or any(k in lower_prompt for k in [
+            "paper cut", "papercut", "paper-cut", "vox", "kliping", "kolase", "stop motion"
+        ])
+
         # Deteksi Durasi yang diminta pengguna (misal: "8 detik", "15 sec")
         duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
-        default_dur = 8 if (persona_key in ["remotion", "tech_vector", "vector"] or "remotion" in lower_prompt) else 12
-        target_duration = int(duration_match.group(1)) if duration_match else default_dur
-        target_duration = max(5, min(60, target_duration))
+        if duration_match:
+            target_duration = int(duration_match.group(1))
+        elif user_audio_dur and user_audio_dur > 0:
+            target_duration = user_audio_dur
+        elif is_daviqin_master:
+            target_duration = 105
+        else:
+            default_dur = 8 if (persona_key in ["remotion", "tech_vector", "vector"] or "remotion" in lower_prompt) else 15
+            target_duration = default_dur
+
+        # Batasi durasi (minimal 5s, maksimal 300s / 5 menit)
+        target_duration = max(5, min(300, target_duration))
 
         # Deteksi permintaan Alpha Channel transparan
         is_alpha_channel = any(k in lower_prompt for k in ["alpha", "transparan", "transparent"])
 
-        # Deteksi Aspect Ratio (Mendukung ejaan Inggris & Indonesia: lanskap, lebar, tidur)
+        # Deteksi Aspect Ratio
         if any(k in lower_prompt for k in ["lanskap", "landscape", "horizontal", "16:9", "lebar", "tidur", "youtube", "desktop"]):
             aspect_ratio = "landscape"
             ratio_label = "16:9 Landscape"
@@ -341,21 +386,34 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             aspect_ratio = "portrait"
             ratio_label = "9:16 Portrait"
         else:
-            # Default aspect ratio berdasarkan mode/persona:
             if persona_key in ["remotion", "tech_vector", "vector"]:
-                aspect_ratio = "landscape"  # Microstock default ke 16:9 Landscape
+                aspect_ratio = "landscape"
                 ratio_label = "16:9 Landscape"
             else:
-                aspect_ratio = "portrait"   # Sosmed (Arye & Haji) default ke 9:16 Portrait
+                aspect_ratio = "portrait"
                 ratio_label = "9:16 Portrait"
 
         # Tentukan persona yang tepat sesuai instruksi mode:
-        if persona_key in ["arye", "personal"]:
+        if is_daviqin_master:
             resolved_persona = "arye"
+            style_variant = "daviqinvid1"
+            brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
+        elif is_papercut:
+            resolved_persona = "arye"
+            style_variant = "papercut"
+            brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
+        elif persona_key in ["arye", "personal"]:
+            resolved_persona = "arye"
+            style_variant = "regular"
+            brand_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
         elif persona_key in ["haji", "hajidarimuda"]:
             resolved_persona = "hajidarimuda"
+            style_variant = "regular"
+            brand_badge = "🕋 HAJI DARI MUDA • EDUKASI"
         elif persona_key in ["remotion", "tech_vector", "vector"]:
             resolved_persona = "tech_vector"
+            style_variant = "clean_vector"
+            brand_badge = "⚡ 3D TECH • HARDWARE VECTOR"
         else:
             is_haji = any(k in lower_prompt for k in ["haji", "umrah", "tawaf", "mina", "mekkah", "makkah", "madinah", "ka'bah"])
             is_tech = any(k in lower_prompt for k in [
@@ -364,70 +422,109 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
             ])
             if is_haji:
                 resolved_persona = "hajidarimuda"
-            elif any(k in lower_prompt for k in ["papercut", "paper cut", "daviqin", "berhala", "sajadah", "ali", "arye"]):
+                style_variant = "regular"
+                brand_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+            elif is_papercut:
                 resolved_persona = "arye"
+                style_variant = "daviqinvid1" if is_daviqin_master else "papercut"
+                brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
             elif any(k in lower_prompt for k in ["microstock", "stock", "shutterstock", "adobe stock"]):
                 resolved_persona = "tech_vector"
+                style_variant = "clean_vector"
+                brand_badge = "⚡ 3D HARDWARE • MICROSTOCK ASSET"
             else:
                 resolved_persona = "tech_vector" if is_tech else "arye"
+                style_variant = "clean_vector" if is_tech else "regular"
+                brand_badge = "⚡ 3D TECH • HARDWARE VECTOR" if is_tech else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
 
-        # Tahap 1: 10% (Kirim pesan progres awal)
+        # Label engine dan deskripsi visual yang kontekstual
+        if is_daviqin_master:
+            engine_label = f"Remotion DaviqinVid1 ({ratio_label})"
+            stage_prep_desc = "Menyiapkan 35 scene Paper Cutout Daviqin & aset kolase..."
+            stage_render_desc = "Engine Remotion sedang me-render animasi Paper Cutout Daviqin (35 scene motion collage)..."
+        elif is_papercut:
+            engine_label = f"Remotion Paper Cutout ({ratio_label})"
+            stage_prep_desc = "Naskah AI siap! Mengompilasi komponen grafis Paper Cut..."
+            stage_render_desc = "Engine Remotion sedang me-render frame visual Paper Cutout..."
+        elif resolved_persona == "tech_vector":
+            engine_label = f"Remotion Microstock ({ratio_label})"
+            stage_prep_desc = "Menyiapkan aset 3D hardware & jalur sirkuit..."
+            stage_render_desc = "Engine Remotion sedang me-render aset visual 3D/vektor..."
+        else:
+            engine_label = f"Remotion React ({ratio_label})"
+            stage_prep_desc = "Naskah AI siap! Mengompilasi komponen grafis Remotion..."
+            stage_render_desc = "Engine Remotion sedang me-render frame video animasi..."
+
+        # Tahap 1: 10%
         init_text = (
             f"🎬 *Sedang Memproses Video Animasi...*\n"
             f"`[{format_progress_bar(10)}]` *10%*\n\n"
-            f"📍 *Status:* Menganalisis request & target durasi...\n"
-            f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+            f"📍 *Status:* Menganalisis request & durasi audio ({target_duration}s)...\n"
+            f"⚙️ *Engine:* {engine_label}\n"
             f"⏱️ *Durasi Target:* {target_duration} Detik\n"
             f"🎯 *Topik:* _{user_prompt}_"
         )
         progress_msg_id = send_telegram_sync(chat_id, init_text)
 
-        # Tahap 2: 35% (Panggil Gemini AI / Analisis Konsep)
+        # Tahap 2: 35%
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
                 f"🤖 *Merancang Konsep Visual & Komposisi...*\n"
                 f"`[{format_progress_bar(35)}]` *35%*\n\n"
                 f"📍 *Status:* Memproses spesifikasi frame & aset animasi visual...\n"
-                f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+                f"⚙️ *Engine:* {engine_label}\n"
                 f"⏱️ *Durasi Target:* {target_duration} Detik\n"
                 f"🎯 *Topik:* _{user_prompt}_"
             )
 
         script_data = generate_script_data(user_prompt, persona_key=resolved_persona)
-        brand_badge = script_data.get("brand_badge", "⚡ 3D TECH • HARDWARE VECTOR")
         persona_used = script_data.get("persona_used", resolved_persona)
         actual_duration = script_data.get("duration_sec", target_duration)
+        if target_duration > actual_duration and (user_audio_dur or is_daviqin_master):
+            actual_duration = target_duration
         is_clean_footage = script_data.get("is_clean_footage", False)
 
-        # Tahap 3: 55% (Menyiapkan Komposisi Remotion)
-        stage_desc = "Menyiapkan aset 3D hardware & jalur sirkuit..." if is_clean_footage else "Naskah AI siap! Mengompilasi komponen grafis Remotion..."
+        # Proteksi Ketat Brand Badge: JANGAN SAMPAI BOCOR KE TECH JIKA DI ARYE / DAVIQIN / HAJI!
+        if is_daviqin_master or is_papercut:
+            brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
+            style_variant = "daviqinvid1" if is_daviqin_master else "papercut"
+        elif persona_used == "arye":
+            brand_badge = script_data.get("brand_badge") or "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+            if "3D TECH" in brand_badge or "HARDWARE" in brand_badge:
+                brand_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+        elif persona_used == "hajidarimuda":
+            brand_badge = script_data.get("brand_badge") or "🕋 HAJI DARI MUDA • EDUKASI"
+            if "3D TECH" in brand_badge or "HARDWARE" in brand_badge:
+                brand_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+        else:
+            brand_badge = script_data.get("brand_badge", "⚡ 3D TECH • HARDWARE VECTOR")
+
+        # Tahap 3: 55%
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
                 f"🎨 *Menyiapkan Komposisi Grafis React...*\n"
                 f"`[{format_progress_bar(55)}]` *55%*\n\n"
-                f"📍 *Status:* {stage_desc}\n"
+                f"📍 *Status:* {stage_prep_desc}\n"
                 f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
-                f"⚙️ *Format:* Remotion React ({ratio_label})\n"
+                f"⚙️ *Format:* {engine_label}\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
 
-        # Tahap 4: 75% (Merender Remotion 60 FPS)
+        # Tahap 4: 75%
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
                 f"🎬 *Merender Frame Video Remotion (60 FPS)...*\n"
                 f"`[{format_progress_bar(75)}]` *75%*\n\n"
-                f"📍 *Status:* Engine Remotion sedang me-render aset visual 3D/vektor...\n"
+                f"📍 *Status:* {stage_render_desc}\n"
                 f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
-                f"⚙️ *Format:* Remotion React ({ratio_label})\n"
+                f"⚙️ *Format:* {engine_label}\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik"
             )
 
         from core.remotion_renderer import render_remotion_video, is_remotion_available
-        style_variant = script_data.get("style_variant", "regular")
-        user_audio = user_uploaded_audio.get(chat_id, "")
 
         remotion_success = False
         if engine == "remotion" and is_remotion_available():
@@ -444,7 +541,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                     is_clean_footage=is_clean_footage,
                     is_alpha_channel=is_alpha_channel,
                     style_variant=style_variant,
-                    audio_path=user_audio
+                    audio_path=user_audio_path
                 )
                 remotion_success = True
             except Exception as rem_err:
@@ -454,7 +551,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                     "error": str(rem_err),
                     "traceback": traceback.format_exc()
                 }
-                logger.warning(f"Remotion render mengalami kendala ({rem_err}). Mengaktifkan fallback graphic engine...", exc_info=True)
+                logger.warning(f"Remotion render mengalami kendala ({rem_err}).", exc_info=True)
                 remotion_success = False
 
         if not remotion_success:
@@ -498,13 +595,21 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"💡 _Visual murni tanpa kartu teks / watermark sosmed. Siap diunggah ke Shutterstock, Adobe Stock, Pond5, atau Envato._"
             )
         else:
-            style_name = "Style Paper Cut (Daviqin)" if style_variant == "papercut" else "Style Regular (Cinematic BRoll)"
+            if is_daviqin_master or style_variant == "daviqinvid1":
+                style_name = "Master Editorial Paper Cutout (6-DaviqinVid1 35-Scenes)"
+            elif is_papercut or style_variant == "papercut":
+                style_name = "Style Paper Cut (Daviqin Vox)"
+            else:
+                style_name = "Style Regular (Cinematic BRoll)"
+
+            audio_sync_line = f"\n🎵 Audio: *Tersinkronisasi penuh ({actual_duration} Detik)*" if user_audio_path else ""
+
             caption_text = (
                 f"✅ *Video Animasi Siap Diposting!*\n"
                 f"━━━━━━━━━━━━━━━━━━━\n"
                 f"🏷️ Kategori: *{brand_badge}*\n"
                 f"🎨 Style: *{style_name}*\n"
-                f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*\n\n"
+                f"⏱️ Durasi: *{actual_duration} Detik* | Format: *{ratio_label}*{audio_sync_line}\n\n"
                 f"📝 *Salin Teks Caption Sosmed Ini:*\n\n"
                 f"{script_data.get('caption', '')}"
             )
@@ -518,7 +623,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"✅ *{status_done}*\n"
                 f"`[{format_progress_bar(100)}]` *100%*\n\n"
                 f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
-                f"⚙️ *Engine:* Remotion React ({ratio_label})\n"
+                f"⚙️ *Engine:* {engine_label}\n"
                 f"⏱️ *Durasi:* {actual_duration} Detik\n"
                 f"📁 *File video telah dikirimkan di bawah 👇*"
             )
@@ -567,7 +672,16 @@ async def send_video_validation_card(chat_id: int, user_id: int, detected_topic:
     mode_now = user_active_modes.get(user_id, "remotion")
     mode_name = PERSONAS.get(mode_now, {}).get("name", mode_now)
     
-    audio_info = f"✅ Ada ({os.path.basename(user_uploaded_audio[chat_id])})" if chat_id in user_uploaded_audio else "❌ Belum ada (Kirim file MP3/Voice Note ke chat ini jika ingin audio khusus)"
+    curr_audio = user_uploaded_audio.get(chat_id)
+    if isinstance(curr_audio, dict):
+        audio_name = curr_audio.get("name", "Audio")
+        audio_dur = curr_audio.get("duration", 0)
+        dur_txt = f" - {audio_dur} detik" if audio_dur else ""
+        audio_info = f"✅ Ada ({audio_name}{dur_txt})"
+    elif isinstance(curr_audio, str) and curr_audio:
+        audio_info = f"✅ Ada ({os.path.basename(curr_audio)})"
+    else:
+        audio_info = "❌ Belum ada (Kirim file MP3/Voice Note ke chat ini jika ingin audio khusus)"
     topic_header = f"🎯 *Topik Terdeteksi:* _{detected_topic}_\n\n" if detected_topic else ""
 
     card = (
@@ -582,7 +696,7 @@ async def send_video_validation_card(chat_id: int, user_id: int, detected_topic:
         f"• `9:16` ➔ Potret (Reels Instagram / TikTok / Shorts Sosmed)\n"
         f"• `1:1` ➔ Kotak (Instagram Feed / LinkedIn)\n\n"
         f"🎨 *2. Pilihan Style Video:*\n"
-        f"• *Mode Arye:* `regular` (Cinematic BRoll ala 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli) atau `papercut` (Daviqin Vox Style ala 6-DaviqinVid1: kraft paper, cutting grid, tape, stamp, 12fps wiggle)\n"
+        f"• *Mode Arye:* `regular` (Cinematic BRoll) atau `papercut` (Daviqin Master Paper-Cutout 6-DaviqinVid1 35 scene)\n"
         f"• *Mode Haji:* Minimalis Brand (Aksen Merah #DC2626 & Elemen Teks Bersih)\n"
         f"• *Mode Remotion:* Microstock Asset 3D + 30 Tags SEO (Tanpa Caption Sosmed) + Alpha Channel\n\n"
         f"📝 *3. Kebutuhan Caption:*\n"
@@ -592,7 +706,7 @@ async def send_video_validation_card(chat_id: int, user_id: int, detected_topic:
         f"`/render <rasio> <style> topik: <topik Anda>`\n\n"
         f"💡 *Contoh:*\n"
         f"1. `/render 16:9 lanskap papercut topik: Arsitektur Cloud VPS`\n"
-        f"2. `/render 9:16 potret regular topik: Sejarah Berhala Kaum Nuh`\n"
+        f"2. `/render 9:16 potret papercut topik: Konsep Daviqin`\n"
         f"3. `/render 9:16 potret topik: 5 Tips Istithaah Haji Usia Muda`\n"
         f"4. `/render 16:9 lanskap microstock topik: 3D Vector Dual RAM DDR5`"
     )
@@ -620,20 +734,27 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
         if audio_obj:
             file_id = audio_obj.get("file_id")
             file_name = audio_obj.get("file_name", "audio_input.mp3")
+            raw_dur = audio_obj.get("duration", 0)
             save_path = os.path.join(TEMP_DIR, f"audio_{chat_id}_{file_name}")
             await send_telegram_message(chat_id, "⏳ *Mengunduh file audio Anda...*")
             success = await download_telegram_file(file_id, save_path)
             if success:
-                user_uploaded_audio[chat_id] = save_path
+                probe_dur = get_audio_duration_sec(save_path, fallback_duration=raw_dur)
+                dur_final = probe_dur if probe_dur > 0 else (raw_dur if raw_dur > 0 else 0)
+                user_uploaded_audio[chat_id] = {
+                    "path": save_path,
+                    "duration": dur_final,
+                    "name": file_name
+                }
+                dur_label = f" ({dur_final} Detik)" if dur_final > 0 else ""
                 await send_telegram_message(
                     chat_id,
                     f"🎵 *File Audio Berhasil Disimpan!*\n"
-                    f"Nama: `{file_name}`\n\n"
-                    f"Audio ini akan otomatis digabungkan sebagai latar video saat Anda me-render.\n\n"
+                    f"Nama: `{file_name}`{dur_label}\n\n"
+                    f"Durasi audio ({dur_final} detik) otomatis menjadi acuan panjang render video agar tersinkronisasi penuh.\n\n"
                     f"Silakan tentukan video yang ingin dibuat:\n"
-                    f"• `/render 16:9 lanskap papercut topik: [Topik]`\n"
-                    f"• `/render 9:16 potret regular topik: [Topik]`\n"
-                    f"• Atau balas chat ini dengan instruksi video yang Anda inginkan!"
+                    f"• Balas chat ini dengan instruksi, misalnya: `bikin video style paper cut daviqin`\n"
+                    f"• Atau perintah: `/render 9:16 potret papercut topik: [Topik]`"
                 )
                 caption = message_data.get("caption", "").strip()
                 if not caption:

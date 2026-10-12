@@ -363,10 +363,11 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
         }
 
     # Deteksi Style Khusus untuk Mode Arye Burhanudin:
-    # 1. Style Paper Cut / Daviqin (mengacu template 6-DaviqinVid1)
+    # 1. Style Paper Cut / Daviqin Master (mengacu template 6-DaviqinVid1)
     # 2. Style Biasa (mengacu 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli)
-    is_papercut_style = any(k in lower_prompt for k in ["paper cut", "papercut", "daviqin", "paper-cut", "vox", "kliping", "kolase", "stop motion"])
-    style_variant = "papercut" if is_papercut_style else "regular"
+    is_daviqin = any(k in lower_prompt for k in ["daviqin", "daviqinvid1", "folder daviqin", "foder daviqin", "template daviqin", "kesyirikan"])
+    is_papercut_style = is_daviqin or any(k in lower_prompt for k in ["paper cut", "papercut", "paper-cut", "vox", "kliping", "kolase", "stop motion"])
+    style_variant = "daviqinvid1" if is_daviqin else ("papercut" if is_papercut_style else "regular")
 
     # Deteksi apakah topik adalah tentang Tech/Hardware/3D vs Haji
     is_haji_related = any(k in lower_prompt for k in [
@@ -377,18 +378,22 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
         "tech", "teknologi", "coding", "software", "ai", "cloud", "server", "grafis", "animasi", "chip"
     ]) and not is_haji_related
 
-    if is_tech_or_custom or persona_key in ["arye", "personal"]:
+    if is_papercut_style or persona_key in ["arye", "personal"]:
         persona_key = "arye"
         guide_content = load_style_guide("arye")
-        default_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if style_variant == "papercut" else "🎙️ ARYE BURHANUDIN • DEEP DIVE TECH"
+        default_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if is_papercut_style else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
     elif is_haji_related or persona_key in ["haji", "hajidarimuda"]:
         persona_key = "hajidarimuda"
         guide_content = load_style_guide("hajidarimuda")
         default_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+    elif is_tech_or_custom or persona_key in ["tech_vector", "vector", "remotion"]:
+        persona_key = "tech_vector"
+        guide_content = load_style_guide("tech_vector") if "tech_vector" in PERSONAS else ""
+        default_badge = "⚡ 3D TECH • HARDWARE VECTOR"
     else:
         persona_key = "arye"
         guide_content = load_style_guide("arye")
-        default_badge = "💡 INSIGHT & EDUKASI KREATIF"
+        default_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
 
     persona = PERSONAS.get(persona_key, PERSONAS["hajidarimuda"])
 
@@ -396,26 +401,31 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
 Kamu bertugas merancang naskah dan aset visual video berdurasi {target_duration} detik sesuai permintaan pengguna:
 Topik: "{topic_prompt}"
 
-PANDUAN FLEKSIBEL:
-1. Jika topik berkaitan dengan Hardware / Tech / 3D Vector / Komputer / Umum:
-   - Jangan paksakan konten islami/haji jika tidak diminta!
-   - Buat judul dan poin-poin yang tajam seputar teknologi, visual 3D, atau edukasi hardware.
-   - brand_badge: Berikan label kategori yang keren dan relevan (contoh: "⚡ 3D TECH • HARDWARE VECTOR" atau "💻 SYSTEM ARCHITECTURE").
-2. Jika topik berkaitan dengan Haji Dari Muda:
-   - Panggilan: "Teman Jalan", data riil, edukasi fiqih/manasik praktis.
-   - brand_badge: "🕋 HAJI DARI MUDA • EDUKASI".
-3. Struktur Visual Teks Layar:
-   - hook_header: 1-2 baris huruf kapital tebal memicu penasaran (Kotak Judul)
-   - points: 3-5 poin ringkas penting yang padat (Kotak Poin)
-   - cta_footer: Ajakan aksi singkat yang relevan (Kotak Bawah)
-   - brand_badge: Label kategori atas
-   - duration_sec: {target_duration}
-   - caption: Naskah caption lengkap siap salin ke Instagram/TikTok/YouTube.
+PANDUAN KATEGORI & BRAND BADGE MUTLAK:
+1. Jika Style Papercut / Daviqin / Vox (Mode Arye Paper Cutout):
+   - brand_badge: "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
+   - Fokus konten: Analisis, investigasi fenomena, telaah dalil/data, atau konsep sesuai audio/prompt pengguna. DILARANG KERAS memaksakan hardware RAM/CPU atau badge 3D Tech!
+2. Jika Mode Arye Burhanudin Reguler:
+   - brand_badge: "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+   - Fokus: Deep dive arsitektur sistem, komputasi, dan edukasi digital.
+3. Jika Mode Haji Dari Muda:
+   - brand_badge: "🕋 HAJI DARI MUDA • EDUKASI"
+   - Panggilan: "Teman Jalan", edukasi manasik/persiapan haji muda.
+4. Jika Khusus 3D Tech / Hardware Vector:
+   - brand_badge: "⚡ 3D TECH • HARDWARE VECTOR"
+
+Struktur Visual Teks Layar:
+- hook_header: 1-2 baris huruf kapital tebal memicu penasaran (Kotak Judul)
+- points: 3-5 poin ringkas penting yang padat (Kotak Poin)
+- cta_footer: Ajakan aksi singkat yang relevan (Kotak Bawah)
+- brand_badge: Label kategori atas sesuai panduan di atas
+- duration_sec: {target_duration}
+- caption: Naskah caption lengkap siap salin ke Instagram/TikTok/YouTube.
 
 Keluarkan respon HANYA dalam format JSON valid tanpa format markdown ```json ... ```.
 Format:
 {{
-  "brand_badge": "...",
+  "brand_badge": "{default_badge}",
   "hook_header": "...",
   "points": ["...", "..."],
   "cta_footer": "...",
@@ -450,22 +460,59 @@ Format:
         data["persona_used"] = persona_key
         data["duration_sec"] = data.get("duration_sec", target_duration)
         data["style_variant"] = style_variant
-        if not data.get("brand_badge"):
+
+        # Sanitasi ketat brand_badge agar tidak pernah bocor ke 3D Tech di Mode Arye / Daviqin
+        if is_papercut_style:
+            data["brand_badge"] = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
+            data["style_variant"] = "daviqinvid1" if is_daviqin else "papercut"
+        elif persona_key in ["arye", "personal"]:
+            curr_b = data.get("brand_badge", "")
+            if not curr_b or "HARDWARE" in curr_b or "3D TECH" in curr_b:
+                data["brand_badge"] = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+        elif persona_key in ["haji", "hajidarimuda"]:
+            curr_b = data.get("brand_badge", "")
+            if not curr_b or "HARDWARE" in curr_b or "3D TECH" in curr_b:
+                data["brand_badge"] = "🕋 HAJI DARI MUDA • EDUKASI"
+        elif not data.get("brand_badge"):
             data["brand_badge"] = default_badge
+
         return data
 
     except Exception as e:
         logger.error(f"Gagal memanggil Gemini API: {e}", exc_info=True)
+        if persona_key == "arye" or is_papercut_style or style_variant in ["papercut", "daviqinvid1"]:
+            fallback_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if (is_papercut_style or style_variant in ["papercut", "daviqinvid1"]) else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+            fallback_hook = "ANALISIS & INVESTIGASI FENOMENA"
+            fallback_points = [
+                "• Bedah akar masalah & pola sistematis",
+                "• Rujukan data primer & fakta terverifikasi",
+                "• Anatomi dampak dan normalisasi isu",
+                "• Solusi terarah & langkah konkret"
+            ]
+        elif persona_key in ["haji", "hajidarimuda"]:
+            fallback_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+            fallback_hook = "5 TIPS PERSIAPAN HAJI DARI MUDA"
+            fallback_points = [
+                "• Niat ikhlas & kuatkan tekad istithaah",
+                "• Buka tabungan porsi haji sedini mungkin",
+                "• Pelajari fiqih manasik & doa harian",
+                "• Jaga kebugaran fisik dan stamina"
+            ]
+        else:
+            fallback_badge = "⚡ 3D TECH • HARDWARE VECTOR"
+            fallback_hook = "ARSITEKTUR TEKNOLOGI MODERN"
+            fallback_points = [
+                "• Pemrosesan data komputasi presisi",
+                "• Optimalisasi alur kerja digital",
+                "• Struktur arsitektur modular & terukur"
+            ]
         return {
-            "hook_header": "POIN PENTING HARI INI!",
-            "points": [
-                "• Catat dan terapkan poin utama",
-                "• Teliti berbasis data & fakta riil",
-                "• Evaluasi progres berkala",
-                "• Simpan dan bagikan ke temanmu"
-            ],
+            "brand_badge": fallback_badge,
+            "hook_header": fallback_hook,
+            "points": fallback_points,
             "cta_footer": "Simpan info penting ini! 📌",
             "caption": f"Topik: {topic_prompt}\n\nSemoga bermanfaat!\n\n#konten #edukasi #insight",
+            "duration_sec": target_duration,
             "persona_used": persona_key,
             "style_variant": style_variant
         }

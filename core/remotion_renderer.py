@@ -28,7 +28,7 @@ def render_remotion_video(
     is_alpha_channel: bool = False,
     style_variant: str = "regular",
     audio_path: str = "",
-    timeout: int = 300,
+    timeout: int = 600,
     custom_gl: str = "",
     use_xvfb: bool = False,
     scale: float = 0.5
@@ -36,12 +36,18 @@ def render_remotion_video(
     """
     Merender video animasi menggunakan Remotion (React & TypeScript).
     Mendukung kustomisasi rasio, durasi, Clean Footage Mode (B-roll murni tanpa kartu teks),
-    Alpha Channel transparan, dan variasi style (regular vs papercut Daviqin):
+    Alpha Channel transparan, variasi style (regular vs papercut Daviqin), dan DaviqinVid1 Master Collage:
     - portrait (9:16 - 1080x1920) untuk Reels/Shorts/TikTok
     - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Footage
     - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
     """
-    if style_variant in ["daviqinvid1", "daviqin_master"] or persona_key in ["daviqinvid1"]:
+    is_daviqin = (
+        style_variant in ["daviqinvid1", "daviqin_master", "daviqin"] or
+        persona_key in ["daviqinvid1", "daviqin"] or
+        "daviqin" in str(style_variant).lower()
+    )
+
+    if is_daviqin:
         comp_id = "DaviqinVid1"
     elif persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
         base_comp = "TechVectorReels"
@@ -96,7 +102,17 @@ def render_remotion_video(
     cli_js = os.path.join(base_dir, "node_modules", "@remotion", "cli", "remotion-cli.js")
     node_bin = shutil.which("node") or "node"
     
-    total_frames = max(90, min(1800, int((duration_sec or 8) * 30)))
+    # Hitung total frames sesuai FPS komposisi
+    if comp_id == "DaviqinVid1":
+        fps = 60
+        dur_target = float(duration_sec or 105)
+        # Daviqin master collage memiliki 35 scene sepanjang 6300 frame (105 detik @ 60 FPS)
+        total_frames = max(120, min(6300, int(round(dur_target * 60))))
+    else:
+        fps = 30
+        dur_target = float(duration_sec or 15)
+        total_frames = max(90, min(9000, int(round(dur_target * 30))))
+
     is_windows = os.name == "nt"
     gl_renderer = custom_gl if custom_gl else ("angle" if is_windows else "swangle")
 
@@ -132,7 +148,7 @@ def render_remotion_video(
         if xvfb_bin and xauth_bin:
             cmd = [xvfb_bin, "-a", "-s", "-screen 0 1280x720x16"] + cmd
 
-    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, GL: {gl_renderer}, Scale: {scale}, Xvfb: {use_xvfb}) ke: {output_mp4_path}")
+    logger.info(f"🚀 Memulai render Remotion [{comp_id}] (Frames: {total_frames}, FPS: {fps}, GL: {gl_renderer}, Scale: {scale}, Xvfb: {use_xvfb}) ke: {output_mp4_path}")
     
     try:
         res = subprocess.run(
@@ -152,10 +168,13 @@ def render_remotion_video(
         # Jika ada audio yang dilampirkan, gabungkan ke MP4 menggunakan ffmpeg
         if audio_path and os.path.exists(audio_path) and os.path.exists(output_mp4_path):
             output_with_audio = os.path.join(temp_dir, f"merged_{task_id}.mp4")
+            ffmpeg_bin = shutil.which("ffmpeg") or "ffmpeg"
             ffmpeg_cmd = [
-                "ffmpeg", "-y",
+                ffmpeg_bin, "-y",
                 "-i", output_mp4_path,
                 "-i", audio_path,
+                "-map", "0:v:0",
+                "-map", "1:a:0",
                 "-c:v", "copy",
                 "-c:a", "aac",
                 "-shortest",
@@ -166,11 +185,13 @@ def render_remotion_video(
                     ffmpeg_cmd if not is_windows else " ".join(f'"{c}"' if " " in c else c for c in ffmpeg_cmd),
                     shell=is_windows,
                     capture_output=True,
-                    timeout=30
+                    timeout=90
                 )
                 if res_ff.returncode == 0 and os.path.exists(output_with_audio):
                     shutil.move(output_with_audio, output_mp4_path)
                     logger.info("🎵 Audio berhasil digabungkan ke video Remotion!")
+                else:
+                    logger.warning(f"ffmpeg return code: {res_ff.returncode}, stderr: {res_ff.stderr}")
             except Exception as e:
                 logger.warning(f"Gagal menggabungkan audio: {e}")
 
