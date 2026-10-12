@@ -349,28 +349,24 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         if user_audio_path and os.path.exists(user_audio_path) and not user_audio_dur:
             user_audio_dur = get_audio_duration_sec(user_audio_path)
 
-        # Deteksi Master Template Daviqin Paper Cutout
-        is_daviqin_master = any(k in lower_prompt for k in [
-            "daviqin", "daviqinvid1", "folder daviqin", "foder daviqin", "template daviqin", "kesyirikan"
-        ])
-        is_papercut = is_daviqin_master or any(k in lower_prompt for k in [
+        # Deteksi Style Paper Cut / Daviqin Reference (mengacu folder 6-DaviqinVid1 sebagai acuan desain)
+        is_papercut = any(k in lower_prompt for k in [
+            "daviqin", "daviqinvid1", "folder daviqin", "foder daviqin", "template daviqin",
             "paper cut", "papercut", "paper-cut", "vox", "kliping", "kolase", "stop motion"
         ])
 
-        # Deteksi Durasi yang diminta pengguna (misal: "8 detik", "15 sec")
+        # Deteksi Durasi yang diminta pengguna (misal: "8 detik", "15 sec") atau dari file audio
         duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
         if duration_match:
             target_duration = int(duration_match.group(1))
         elif user_audio_dur and user_audio_dur > 0:
             target_duration = user_audio_dur
-        elif is_daviqin_master:
-            target_duration = 105
         else:
             default_dur = 8 if (persona_key in ["remotion", "tech_vector", "vector"] or "remotion" in lower_prompt) else 15
             target_duration = default_dur
 
-        # Batasi durasi (minimal 5s, maksimal 300s / 5 menit)
-        target_duration = max(5, min(300, target_duration))
+        # Batasi durasi (minimal 5s, maksimal 360s / 6 menit)
+        target_duration = max(5, min(360, target_duration))
 
         # Deteksi permintaan Alpha Channel transparan
         is_alpha_channel = any(k in lower_prompt for k in ["alpha", "transparan", "transparent"])
@@ -394,18 +390,14 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 ratio_label = "9:16 Portrait"
 
         # Tentukan persona yang tepat sesuai instruksi mode:
-        if is_daviqin_master:
-            resolved_persona = "arye"
-            style_variant = "daviqinvid1"
-            brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
-        elif is_papercut:
+        if is_papercut:
             resolved_persona = "arye"
             style_variant = "papercut"
             brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
         elif persona_key in ["arye", "personal"]:
             resolved_persona = "arye"
-            style_variant = "regular"
-            brand_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+            style_variant = "papercut" if is_papercut else "regular"
+            brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if is_papercut else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
         elif persona_key in ["haji", "hajidarimuda"]:
             resolved_persona = "hajidarimuda"
             style_variant = "regular"
@@ -426,7 +418,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 brand_badge = "🕋 HAJI DARI MUDA • EDUKASI"
             elif is_papercut:
                 resolved_persona = "arye"
-                style_variant = "daviqinvid1" if is_daviqin_master else "papercut"
+                style_variant = "papercut"
                 brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
             elif any(k in lower_prompt for k in ["microstock", "stock", "shutterstock", "adobe stock"]):
                 resolved_persona = "tech_vector"
@@ -438,22 +430,18 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 brand_badge = "⚡ 3D TECH • HARDWARE VECTOR" if is_tech else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
 
         # Label engine dan deskripsi visual yang kontekstual
-        if is_daviqin_master:
-            engine_label = f"Remotion DaviqinVid1 ({ratio_label})"
-            stage_prep_desc = "Menyiapkan 35 scene Paper Cutout Daviqin & aset kolase..."
-            stage_render_desc = "Engine Remotion sedang me-render animasi Paper Cutout Daviqin (35 scene motion collage)..."
-        elif is_papercut:
+        if is_papercut:
             engine_label = f"Remotion Paper Cutout ({ratio_label})"
-            stage_prep_desc = "Naskah AI siap! Mengompilasi komponen grafis Paper Cut..."
-            stage_render_desc = "Engine Remotion sedang me-render frame visual Paper Cutout..."
+            stage_prep_desc = "Menyusun scene visual Paper Cutout segar (multi-scene) sesuai topik audio..."
+            stage_render_desc = f"Engine Remotion sedang me-render video visual Paper Cutout ({target_duration}s)..."
         elif resolved_persona == "tech_vector":
             engine_label = f"Remotion Microstock ({ratio_label})"
             stage_prep_desc = "Menyiapkan aset 3D hardware & jalur sirkuit..."
-            stage_render_desc = "Engine Remotion sedang me-render aset visual 3D/vektor..."
+            stage_render_desc = f"Engine Remotion sedang me-render aset visual 3D/vektor ({target_duration}s)..."
         else:
             engine_label = f"Remotion React ({ratio_label})"
             stage_prep_desc = "Naskah AI siap! Mengompilasi komponen grafis Remotion..."
-            stage_render_desc = "Engine Remotion sedang me-render frame video animasi..."
+            stage_render_desc = f"Engine Remotion sedang me-render frame video animasi ({target_duration}s)..."
 
         # Tahap 1: 10%
         init_text = (
@@ -478,25 +466,25 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"🎯 *Topik:* _{user_prompt}_"
             )
 
-        script_data = generate_script_data(user_prompt, persona_key=resolved_persona)
+        script_data = generate_script_data(user_prompt, persona_key=resolved_persona, target_duration=target_duration)
         persona_used = script_data.get("persona_used", resolved_persona)
-        actual_duration = script_data.get("duration_sec", target_duration)
-        if target_duration > actual_duration and (user_audio_dur or is_daviqin_master):
-            actual_duration = target_duration
+        actual_duration = target_duration if (user_audio_dur and user_audio_dur > 0) else script_data.get("duration_sec", target_duration)
         is_clean_footage = script_data.get("is_clean_footage", False)
 
         # Proteksi Ketat Brand Badge: JANGAN SAMPAI BOCOR KE TECH JIKA DI ARYE / DAVIQIN / HAJI!
-        if is_daviqin_master or is_papercut:
+        if is_papercut:
             brand_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
-            style_variant = "daviqinvid1" if is_daviqin_master else "papercut"
+            style_variant = "papercut"
         elif persona_used == "arye":
             brand_badge = script_data.get("brand_badge") or "🎙️ ARYE BURHANUDIN • DEEP DIVE"
             if "3D TECH" in brand_badge or "HARDWARE" in brand_badge:
                 brand_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+            style_variant = "papercut" if is_papercut else "regular"
         elif persona_used == "hajidarimuda":
             brand_badge = script_data.get("brand_badge") or "🕋 HAJI DARI MUDA • EDUKASI"
             if "3D TECH" in brand_badge or "HARDWARE" in brand_badge:
                 brand_badge = "🕋 HAJI DARI MUDA • EDUKASI"
+            style_variant = "regular"
         else:
             brand_badge = script_data.get("brand_badge", "⚡ 3D TECH • HARDWARE VECTOR")
 
@@ -516,7 +504,7 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
         if progress_msg_id:
             edit_telegram_sync(
                 chat_id, progress_msg_id,
-                f"🎬 *Merender Frame Video Remotion (60 FPS)...*\n"
+                f"🎬 *Merender Frame Video Remotion (30 FPS Multi-Scene)...*\n"
                 f"`[{format_progress_bar(75)}]` *75%*\n\n"
                 f"📍 *Status:* {stage_render_desc}\n"
                 f"🏷️ *Tipe:* *{'Footage B-Roll Bersih' if is_clean_footage else brand_badge}*\n"
@@ -541,7 +529,8 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                     is_clean_footage=is_clean_footage,
                     is_alpha_channel=is_alpha_channel,
                     style_variant=style_variant,
-                    audio_path=user_audio_path
+                    audio_path=user_audio_path,
+                    scenes=script_data.get("scenes", [])
                 )
                 remotion_success = True
             except Exception as rem_err:
@@ -595,12 +584,10 @@ def process_video_generation(chat_id: int, user_prompt: str, persona_key: str = 
                 f"💡 _Visual murni tanpa kartu teks / watermark sosmed. Siap diunggah ke Shutterstock, Adobe Stock, Pond5, atau Envato._"
             )
         else:
-            if is_daviqin_master or style_variant == "daviqinvid1":
-                style_name = "Master Editorial Paper Cutout (6-DaviqinVid1 35-Scenes)"
-            elif is_papercut or style_variant == "papercut":
-                style_name = "Style Paper Cut (Daviqin Vox)"
+            if is_papercut or style_variant == "papercut":
+                style_name = "Style Paper Cut (Acuan Daviqin Vox 6-DaviqinVid1)"
             else:
-                style_name = "Style Regular (Cinematic BRoll)"
+                style_name = "Style Regular (Cinematic Deep Dive 2-BerhalaKaumNuh)"
 
             audio_sync_line = f"\n🎵 Audio: *Tersinkronisasi penuh ({actual_duration} Detik)*" if user_audio_path else ""
 
@@ -1203,7 +1190,7 @@ def get_last_error():
 
 @app.get("/api/test_daviqin")
 def test_daviqin():
-    """Menjalankan uji coba render 1 detik DaviqinVid1 di server untuk diagnosa teknis."""
+    """Menjalankan uji coba render 1 detik AryeReels Papercut (Daviqin Vox) di server untuk diagnosa teknis."""
     from core.remotion_renderer import render_remotion_video
     try:
         test_out = os.path.join(TEMP_DIR, "test_daviqin_api.mp4")
@@ -1216,12 +1203,12 @@ def test_daviqin():
             aspect_ratio="portrait",
             brand_badge="✂️ DAVIQIN • EDITORIAL PAPER CUTOUT",
             duration_sec=1,
-            style_variant="daviqinvid1",
+            style_variant="papercut",
             timeout=120
         )
         return {
             "status": "ok",
-            "message": "Render DaviqinVid1 berhasil!",
+            "message": "Render AryeReels Papercut (Daviqin Vox) berhasil!",
             "file": res,
             "exists": os.path.exists(res),
             "size": os.path.getsize(res) if os.path.exists(res) else 0

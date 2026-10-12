@@ -46,7 +46,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="HajiReels"
         component={HajiReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1920}
@@ -56,7 +56,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="HajiReelsLandscape"
         component={HajiReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1920}
         height={1080}
@@ -66,7 +66,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="HajiReelsSquare"
         component={HajiReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1080}
@@ -77,7 +77,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="AryeReels"
         component={AryeReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1920}
@@ -87,7 +87,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="AryeReelsLandscape"
         component={AryeReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1920}
         height={1080}
@@ -97,7 +97,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="AryeReelsSquare"
         component={AryeReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1080}
@@ -108,7 +108,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="TechVectorReels"
         component={TechVectorReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1920}
@@ -118,7 +118,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="TechVectorReelsLandscape"
         component={TechVectorReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1920}
         height={1080}
@@ -128,7 +128,7 @@ export const RemotionRoot: React.FC = () => {
       <Composition<any, any>
         id="TechVectorReelsSquare"
         component={TechVectorReels}
-        durationInFrames={1800}
+        durationInFrames={10800}
         fps={30}
         width={1080}
         height={1080}

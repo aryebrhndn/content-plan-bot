@@ -31,51 +31,43 @@ def render_remotion_video(
     timeout: int = 600,
     custom_gl: str = "",
     use_xvfb: bool = False,
-    scale: float = 0.5
+    scale: float = 0.5,
+    scenes: list = None
 ) -> str:
     """
-    Merender video animasi menggunakan Remotion (React & TypeScript).
-    Mendukung kustomisasi rasio, durasi, Clean Footage Mode (B-roll murni tanpa kartu teks),
-    Alpha Channel transparan, variasi style (regular vs papercut Daviqin), dan DaviqinVid1 Master Collage:
+    Merender video animasi dinamis menggunakan Remotion (React & TypeScript).
+    Mendukung kustomisasi rasio, durasi penuh sinkron dengan audio pengguna,
+    multi-scene berurutan (scenes array), dan 2 acuan style:
+    - style_variant="papercut": Acuan folder 6-DaviqinVid1 (Paper texture, cutting mat, tape, marker highlight)
+    - style_variant="regular": Acuan folder 2-BerhalaKaumNuh / Cinematic BRoll (Dark slate, cyan/amber glowing cards)
+    Rasio:
     - portrait (9:16 - 1080x1920) untuk Reels/Shorts/TikTok
     - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Footage
     - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
     """
-    is_daviqin = (
-        style_variant in ["daviqinvid1", "daviqin_master", "daviqin"] or
+    is_papercut_requested = (
+        style_variant in ["papercut", "daviqinvid1", "daviqin_master", "daviqin", "kolase", "kliping"] or
         persona_key in ["daviqinvid1", "daviqin"] or
-        "daviqin" in str(style_variant).lower()
+        "daviqin" in str(style_variant).lower() or
+        "paper" in str(style_variant).lower()
     )
+    style_variant_clean = "papercut" if is_papercut_requested else (style_variant or "regular")
 
-    if is_daviqin:
-        comp_id = "DaviqinVid1"
-    elif persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
+    if persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
         base_comp = "TechVectorReels"
-        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
-        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
-            comp_id = f"{base_comp}Landscape"
-        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
-            comp_id = f"{base_comp}Square"
-        else:
-            comp_id = base_comp
-    elif persona_key in ["arye", "personal"]:
-        base_comp = "AryeReels"
-        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
-        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
-            comp_id = f"{base_comp}Landscape"
-        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
-            comp_id = f"{base_comp}Square"
-        else:
-            comp_id = base_comp
-    else:
+    elif persona_key in ["haji", "hajidarimuda"]:
         base_comp = "HajiReels"
-        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
-        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
-            comp_id = f"{base_comp}Landscape"
-        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
-            comp_id = f"{base_comp}Square"
-        else:
-            comp_id = base_comp
+    else:
+        # Default untuk Mode Arye, Daviqin Style, maupun Personal
+        base_comp = "AryeReels"
+
+    aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
+    if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
+        comp_id = f"{base_comp}Landscape"
+    elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
+        comp_id = f"{base_comp}Square"
+    else:
+        comp_id = base_comp
 
     task_id = uuid.uuid4().hex[:8]
     temp_dir = os.path.dirname(os.path.abspath(output_mp4_path))
@@ -90,8 +82,10 @@ def render_remotion_video(
         "duration_sec": duration_sec,
         "is_clean_footage": is_clean_footage,
         "is_alpha_channel": is_alpha_channel,
-        "style_variant": style_variant
+        "style_variant": style_variant_clean
     }
+    if scenes and isinstance(scenes, list) and len(scenes) > 0:
+        props_data["scenes"] = scenes
 
     with open(props_json_path, "w", encoding="utf-8") as f:
         json.dump(props_data, f, ensure_ascii=False, indent=2)
@@ -102,16 +96,10 @@ def render_remotion_video(
     cli_js = os.path.join(base_dir, "node_modules", "@remotion", "cli", "remotion-cli.js")
     node_bin = shutil.which("node") or "node"
     
-    # Hitung total frames sesuai FPS komposisi
-    if comp_id == "DaviqinVid1":
-        fps = 60
-        dur_target = float(duration_sec or 105)
-        # Daviqin master collage memiliki 35 scene sepanjang 6300 frame (105 detik @ 60 FPS)
-        total_frames = max(120, min(6300, int(round(dur_target * 60))))
-    else:
-        fps = 30
-        dur_target = float(duration_sec or 15)
-        total_frames = max(90, min(9000, int(round(dur_target * 30))))
+    # Hitung total frames pada 30 FPS adaptif terhadap panjang audio (hingga 360 detik / 6 menit = 10800 frame)
+    fps = 30
+    dur_target = float(duration_sec or 15)
+    total_frames = max(90, min(10800, int(round(dur_target * 30))))
 
     is_windows = os.name == "nt"
     gl_renderer = custom_gl if custom_gl else ("angle" if is_windows else "swangle")

@@ -206,14 +206,16 @@ def chat_with_gemini(user_message: str, persona_key: str = "arye") -> str:
     system_architecture_knowledge = """
 SISTEM & KNOWLEDGE BASE PROYEK (SANGAT PENTING - BACA BAIK-BAIK):
 1. LOKASI & LINGKUNGAN: Kamu berjalan langsung di backend cloud server Railway (didukung engine Remotion React + FastAPI Python).
-2. AKSES FOLDER & TEMPLATE ACUAN:
-   - Kamu TAHU PASTI dan MEMILIKI akses ke struktur folder di sistem ini, khususnya:
-     • Folder 'remotion/6-DaviqinVid1/' ➔ Master Template Editorial Paper-Collage (Vox Style) lengkap dengan PaperWrapper.tsx, Scenes1.tsx, Scenes2.tsx, CollageElements.tsx, Typography.tsx, PaperCutout.tsx, dan PaperTransition.tsx.
-     • Folder 'public/videomq-6/' ➔ Aset grafis cutout (agree_tauhid, berhala_batu, lisan_anak, hati_tergantung, globe_dunia, dsb.) dan audio narasi 'daviqin-kesyirikan.mp3' serta SFX kertas 'paper-crinkle.wav'.
-     • Folder 'public/sfx/' ➔ Efek suara taktil kertas & transisi.
-     • Referensi video serial MQ lainnya: '2-BerhalaKaumNuh' (Investigasi Fenomena Berhala), '3-SajadahSyirik' (Bedah Kasus & Analisis Dalil), '4-MisiKpdAli' (Dokumenter Sejarah / Deep Dive).
-     • Template Remotion: 'remotion/AryeReels.tsx' (PaperCutout Daviqin style + Regular Cinematic BRoll), 'remotion/HajiReels.tsx' (Minimalis Elegan Merah Brand Haji), dan 'remotion/TechVectorReels.tsx' (3D Hardware Vector).
-3. DILARANG KERAS MENGATAKAN: 'Sebagai AI aku tidak punya akses ke sistem penyimpanan lokal atau file pribadimu' atau mengaku tidak tahu folder '6-DaviqinVid1'! Kamu adalah asisten resmi dari sistem ini yang terintegrasi langsung dengan repository proyek!
+2. AKSES FOLDER & TEMPLATE ACUAN SEBAGAI DESIGN SYSTEM (STYLE REFERENCES):
+   - Kamu TAHU PASTI dan MEMILIKI akses ke struktur folder di sistem ini:
+     • Folder 'remotion/6-DaviqinVid1/' ➔ ACUAN STYLE Paper Cutout Vox Editorial (PaperWrapper.tsx, Typography.tsx, PaperCutout.tsx, CollageElements.tsx: kraft paper, cutting mat grid, scotch tape, marker highlight merah, dossier header, rubber stamp, 12fps wiggle).
+     • Folder '2-BerhalaKaumNuh', '3-SajadahSyirik', '4-MisiKpdAli' ➔ ACUAN STYLE Cinematic BRoll Deep Dive (dark slate, cyan/amber glowing cards, modern typography).
+     • Engine Produksi Video: 'remotion/AryeReels.tsx' (Master Composition dinamis multi-scene yang mengadopsi 2 variasi style di atas).
+3. HUKUM MUTLAK GENERATE VIDEO BARU DARI AUDIO/REQUEST:
+   - DILARANG KERAS menimpa file video lama '6-DaviqinVid1' atau memunculkan visual berhala Nabi Nuh yang tidak nyambung dengan topik audio baru!
+   - Folder di atas HANYALAH ACUAN STYLE (VISUAL DESIGN SYSTEM).
+   - Setiap kali pengguna mengirimkan audio baru (misal MP3) atau request video baru, sistem HARUS merancang dan me-render VIDEO MURNI BARU (FRESH) yang naskah teks layar, headline, poin-poin analisis, dan pergantian scenenya 100% SESUAI DENGAN APA YANG DIUCAPKAN AUDIO TERSEBUT!
+   - Durasi video disinkronkan PENUH dengan durasi MP3 pengguna (misal ~104 detik / hampir 2 menit), dengan pembagian 5-7 scene berurutan (multi-scene) sepanjang durasi audio tanpa dipotong!
 4. FOKUS KONTEN SOSMED VS MICROSTOCK:
    - Mode Arye Burhanudin dan Mode Haji Dari Muda adalah MURNI KONTEN SOSMED (Instagram Reels, TikTok, YouTube Shorts, narasi edukatif, storytelling, video talking head, dan B-roll).
    - DILARANG KERAS membelokkan percakapan ke Microstock, Shutterstock, Adobe Stock, atau jualan asset jika pengguna sedang di Mode Arye, Mode Haji, membahas Paper Cut, atau konten sosmed!
@@ -222,7 +224,7 @@ SISTEM & KNOWLEDGE BASE PROYEK (SANGAT PENTING - BACA BAIK-BAIK):
    - Sistem bot ini SUDAH MENDUKUNG penerimaan file MP3 / Voice Note via Telegram.
    - Jika pengguna bertanya 'apakah bisa dibikinin video dari lampiran MP3 dengan style daviqinvid1 di mode arye?':
      ➔ JAWAB TEGAS: 'Bisa banget!'
-     ➔ Jelaskan alurnya: Pengguna cukup kirimkan file MP3 narasi/suara ke chat Telegram ini -> bot otomatis menyimpannya -> pengguna ketik instruksi render video Paper Cut (Daviqin 6-DaviqinVid1) -> server Railway akan merender video Remotion berlatar PaperWrapper (kraft paper, cutting mat grid, scotch tape, rubber stamp, 12fps stop-motion wiggle) dan menyinkronkannya dengan durasi MP3 tersebut!
+     ➔ Jelaskan alurnya: Bot menerima MP3 -> membaca topik narasinya -> merancang naskah visual multi-scene fresh yang sinkron dengan isi audio -> me-render video Remotion dengan acuan style pilihan (Paper Cutout Daviqin Vox style atau Cinematic Deep Dive) sepanjang durasi utuh audio tersebut!
 """
 
     if persona_key in ["arye", "personal"]:
@@ -321,19 +323,105 @@ Keluarkan HANYA format JSON valid:
         }
 
 
-def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
+def build_sequential_scenes(
+    topic_prompt: str,
+    hook_header: str,
+    points: list[str],
+    cta_footer: str,
+    target_duration: int = 15,
+    is_papercut: bool = True
+) -> list[dict]:
+    """
+    Membangun daftar scene dinamis berurutan (multi-scene) sepanjang durasi video (misal 104 detik).
+    Tiap scene memuat headline spesifik, subtext, highlight_word (garis marker merah),
+    poin detail, dan exhibit label.
+    """
+    if target_duration <= 20:
+        num_scenes = 3
+    elif target_duration <= 45:
+        num_scenes = 4
+    elif target_duration <= 75:
+        num_scenes = 5
+    elif target_duration <= 130:
+        num_scenes = 6
+    else:
+        num_scenes = min(8, max(5, int(round(target_duration / 20))))
+
+    pts = [p.replace("•", "").replace("-", "").strip() for p in points if p.strip()]
+    if not pts:
+        pts = [
+            "Analisis mendalam berbasis data primer & fakta riil",
+            "Identifikasi pola dan akar permasalahan mendasar",
+            "Evaluasi komparatif & telaah bukti lapangan",
+            "Optimalisasi solusi dan implementasi terarah"
+        ]
+
+    scenes = []
+
+    # Scene 1: Hook / Investigasi Pembuka
+    hook_clean = (hook_header or topic_prompt or "BEDAH ANALISIS").upper()
+    hook_words = [w for w in hook_clean.split() if len(w) > 2]
+    hl_word = hook_words[0] if hook_words else "ANALISIS"
+    scenes.append({
+        "tag": "INVESTIGASI // PEMBUKA",
+        "headline": hook_clean[:45],
+        "subtext": f"Menyelami fenomena penting dan anomali seputar {topic_prompt[:50]}.",
+        "highlight_word": hl_word,
+        "points": [pts[0] if pts else "Telaah awal berbasis data primer"],
+        "exhibit": "EXHIBIT #01",
+        "theme": "A_Cream"
+    })
+
+    # Middle Scenes: Membagi poin-poin menjadi scene tersendiri
+    mid_count = max(1, num_scenes - 2)
+    for i in range(mid_count):
+        pt_idx = (i + 1) % len(pts)
+        curr_pt = pts[pt_idx]
+        words = curr_pt.split()
+        head = " ".join(words[:5]).upper() if words else f"FAKTA KRUSIAL #{i+2}"
+        sub = " ".join(words[5:]) if len(words) > 5 else curr_pt
+        sub_hl = words[0] if words else "FAKTA"
+        theme = "B_DeepInk" if i % 2 == 0 else "A_Cream"
+
+        scenes.append({
+            "tag": f"FAKTA LAPANGAN #{i+2} // BUKTI",
+            "headline": head[:45],
+            "subtext": sub[:120],
+            "highlight_word": sub_hl,
+            "points": [curr_pt[:90]],
+            "exhibit": f"CASE REF #0{i+2}",
+            "theme": theme
+        })
+
+    # Final Scene: Kesimpulan & Rekomendasi / CTA
+    scenes.append({
+        "tag": "KESIMPULAN // REKOMENDASI",
+        "headline": "SOLUSI & TINDAKAN KONKRET",
+        "subtext": cta_footer or f"Simpan catatan ini untuk referensi seputar {topic_prompt[:40]}! 📌",
+        "highlight_word": "SOLUSI",
+        "points": ["Simpan info penting ini untuk referensi", "Bagikan agar lebih banyak yang teredukasi"],
+        "exhibit": "VERIFIED #COMPLETE",
+        "theme": "A_Cream"
+    })
+
+    return scenes
+
+
+def generate_script_data(topic_prompt: str, persona_key: str = "auto", target_duration: int = None) -> dict:
     """
     Menghasilkan naskah konten JSON terstruktur untuk dirender ke video Remotion/Reels.
-    Fleksibel dan adaptif terhadap request pengguna (durasi, topik tech/3D/haji/umum, dan variasi style).
+    Fleksibel dan adaptif terhadap durasi audio penuh pengguna (hingga 360s), topik,
+    dan variasi style (Papercut Daviqin Vox vs Regular Cinematic).
     """
     import re
 
     lower_prompt = topic_prompt.lower()
     
-    # Deteksi durasi dari request pengguna (misal: "8 detik", "15 detik")
-    duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
-    target_duration = int(duration_match.group(1)) if duration_match else 12
-    target_duration = max(5, min(60, target_duration))
+    # Deteksi durasi dari request pengguna (misal: "8 detik", "15 detik") jika tidak diberikan
+    if target_duration is None or target_duration <= 0:
+        duration_match = re.search(r'(\d+)\s*(?:detik|sec|second)', lower_prompt)
+        target_duration = int(duration_match.group(1)) if duration_match else 15
+    target_duration = max(5, min(360, target_duration))
 
     # Deteksi Mode Microstock / Clean Footage (Mode Remotion atau kata kunci stock)
     is_microstock = (
@@ -363,11 +451,11 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
         }
 
     # Deteksi Style Khusus untuk Mode Arye Burhanudin:
-    # 1. Style Paper Cut / Daviqin Master (mengacu template 6-DaviqinVid1)
-    # 2. Style Biasa (mengacu 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli)
+    # 1. Style Paper Cut (mengacu template desain 6-DaviqinVid1)
+    # 2. Style Regular (mengacu template desain 2-BerhalaKaumNuh, 3-SajadahSyirik, 4-MisiKpdAli)
     is_daviqin = any(k in lower_prompt for k in ["daviqin", "daviqinvid1", "folder daviqin", "foder daviqin", "template daviqin", "kesyirikan"])
     is_papercut_style = is_daviqin or any(k in lower_prompt for k in ["paper cut", "papercut", "paper-cut", "vox", "kliping", "kolase", "stop motion"])
-    style_variant = "daviqinvid1" if is_daviqin else ("papercut" if is_papercut_style else "regular")
+    style_variant = "papercut" if is_papercut_style else "regular"
 
     # Deteksi apakah topik adalah tentang Tech/Hardware/3D vs Haji
     is_haji_related = any(k in lower_prompt for k in [
@@ -395,16 +483,27 @@ def generate_script_data(topic_prompt: str, persona_key: str = "auto") -> dict:
         guide_content = load_style_guide("arye")
         default_badge = "🎙️ ARYE BURHANUDIN • DEEP DIVE"
 
-    persona = PERSONAS.get(persona_key, PERSONAS["hajidarimuda"])
+    # Hitung jumlah scene dinamis
+    if target_duration <= 20:
+        num_scenes = 3
+    elif target_duration <= 45:
+        num_scenes = 4
+    elif target_duration <= 75:
+        num_scenes = 5
+    elif target_duration <= 130:
+        num_scenes = 6
+    else:
+        num_scenes = 7
 
     system_instruction = f"""Kamu adalah Video Creative Director dan Scriptwriter handal.
-Kamu bertugas merancang naskah dan aset visual video berdurasi {target_duration} detik sesuai permintaan pengguna:
+Kamu bertugas merancang naskah dan aset visual video MURNI BARU (FRESH) berdurasi {target_duration} detik dengan {num_scenes} scene berurutan sesuai permintaan pengguna:
 Topik: "{topic_prompt}"
 
 PANDUAN KATEGORI & BRAND BADGE MUTLAK:
 1. Jika Style Papercut / Daviqin / Vox (Mode Arye Paper Cutout):
    - brand_badge: "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
-   - Fokus konten: Analisis, investigasi fenomena, telaah dalil/data, atau konsep sesuai audio/prompt pengguna. DILARANG KERAS memaksakan hardware RAM/CPU atau badge 3D Tech!
+   - Acuan desain visual: Kraft paper, cutting mat grid, scotch tape, rubber stamp, marker highlight merah.
+   - FOKUS KONTEN HARUS 100% SESUAI TOPIK / AUDIO PENGGUNA! DILARANG KERAS memaksakan hardware RAM/CPU atau berhala Nabi Nuh jika topik tidak membahas itu!
 2. Jika Mode Arye Burhanudin Reguler:
    - brand_badge: "🎙️ ARYE BURHANUDIN • DEEP DIVE"
    - Fokus: Deep dive arsitektur sistem, komputasi, dan edukasi digital.
@@ -416,22 +515,21 @@ PANDUAN KATEGORI & BRAND BADGE MUTLAK:
 
 Struktur Visual Teks Layar:
 - hook_header: 1-2 baris huruf kapital tebal memicu penasaran (Kotak Judul)
-- points: 3-5 poin ringkas penting yang padat (Kotak Poin)
+- points: 4-6 poin ringkas penting yang padat (Kotak Poin)
 - cta_footer: Ajakan aksi singkat yang relevan (Kotak Bawah)
 - brand_badge: Label kategori atas sesuai panduan di atas
 - duration_sec: {target_duration}
+- scenes: Array berisi {num_scenes} scene berurutan. Setiap scene memiliki:
+    tag: Label investigasi (misal 'INVESTIGASI // PEMBUKA' atau 'FAKTA #2 // BUKTI LAPANGAN')
+    headline: Judul scene singkat huruf kapital
+    subtext: Penjelasan rinci segmen ini
+    highlight_word: Kata kunci penting yang digarisbawahi marker merah
+    points: Array berisi 1-2 poin spesifik
+    exhibit: Nomor berkas (misal 'EXHIBIT #01', 'CASE REF #02')
+    theme: 'A_Cream' atau 'B_DeepInk'
 - caption: Naskah caption lengkap siap salin ke Instagram/TikTok/YouTube.
 
-Keluarkan respon HANYA dalam format JSON valid tanpa format markdown ```json ... ```.
-Format:
-{{
-  "brand_badge": "{default_badge}",
-  "hook_header": "...",
-  "points": ["...", "..."],
-  "cta_footer": "...",
-  "duration_sec": {target_duration},
-  "caption": "..."
-}}"""
+Keluarkan respon HANYA dalam format JSON valid tanpa format markdown ```json ... ```."""
 
     try:
         payload = {
@@ -439,7 +537,7 @@ Format:
                 "parts": [{"text": system_instruction}]
             },
             "contents": [
-                {"parts": [{"text": f"Rancang naskah video berdurasi {target_duration} detik untuk topik ini: {topic_prompt}"}]}
+                {"parts": [{"text": f"Rancang naskah video segar berdurasi {target_duration} detik dengan {num_scenes} scene untuk topik ini: {topic_prompt}"}]}
             ],
             "generationConfig": {
                 "response_mime_type": "application/json"
@@ -458,13 +556,13 @@ Format:
 
         data = json.loads(text_content)
         data["persona_used"] = persona_key
-        data["duration_sec"] = data.get("duration_sec", target_duration)
+        data["duration_sec"] = target_duration
         data["style_variant"] = style_variant
 
         # Sanitasi ketat brand_badge agar tidak pernah bocor ke 3D Tech di Mode Arye / Daviqin
         if is_papercut_style:
             data["brand_badge"] = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT"
-            data["style_variant"] = "daviqinvid1" if is_daviqin else "papercut"
+            data["style_variant"] = "papercut"
         elif persona_key in ["arye", "personal"]:
             curr_b = data.get("brand_badge", "")
             if not curr_b or "HARDWARE" in curr_b or "3D TECH" in curr_b:
@@ -476,13 +574,25 @@ Format:
         elif not data.get("brand_badge"):
             data["brand_badge"] = default_badge
 
+        # Pastikan scenes valid dan memiliki minimal 2 scene
+        scenes_raw = data.get("scenes")
+        if not scenes_raw or not isinstance(scenes_raw, list) or len(scenes_raw) < 2:
+            data["scenes"] = build_sequential_scenes(
+                topic_prompt=topic_prompt,
+                hook_header=data.get("hook_header", ""),
+                points=data.get("points", []),
+                cta_footer=data.get("cta_footer", ""),
+                target_duration=target_duration,
+                is_papercut=is_papercut_style
+            )
+
         return data
 
     except Exception as e:
         logger.error(f"Gagal memanggil Gemini API: {e}", exc_info=True)
-        if persona_key == "arye" or is_papercut_style or style_variant in ["papercut", "daviqinvid1"]:
-            fallback_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if (is_papercut_style or style_variant in ["papercut", "daviqinvid1"]) else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
-            fallback_hook = "ANALISIS & INVESTIGASI FENOMENA"
+        if persona_key == "arye" or is_papercut_style or style_variant == "papercut":
+            fallback_badge = "✂️ DAVIQIN • EDITORIAL PAPER CUTOUT" if (is_papercut_style or style_variant == "papercut") else "🎙️ ARYE BURHANUDIN • DEEP DIVE"
+            fallback_hook = f"ANALISIS: {topic_prompt[:35].upper()}" if topic_prompt else "ANALISIS & INVESTIGASI FENOMENA"
             fallback_points = [
                 "• Bedah akar masalah & pola sistematis",
                 "• Rujukan data primer & fakta terverifikasi",
@@ -506,11 +616,22 @@ Format:
                 "• Optimalisasi alur kerja digital",
                 "• Struktur arsitektur modular & terukur"
             ]
+        
+        fallback_cta = "Simpan info penting ini! 📌"
+        fallback_scenes = build_sequential_scenes(
+            topic_prompt=topic_prompt,
+            hook_header=fallback_hook,
+            points=fallback_points,
+            cta_footer=fallback_cta,
+            target_duration=target_duration,
+            is_papercut=is_papercut_style
+        )
         return {
             "brand_badge": fallback_badge,
             "hook_header": fallback_hook,
             "points": fallback_points,
-            "cta_footer": "Simpan info penting ini! 📌",
+            "cta_footer": fallback_cta,
+            "scenes": fallback_scenes,
             "caption": f"Topik: {topic_prompt}\n\nSemoga bermanfaat!\n\n#konten #edukasi #insight",
             "duration_sec": target_duration,
             "persona_used": persona_key,
