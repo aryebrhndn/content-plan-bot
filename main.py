@@ -1190,7 +1190,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v2.4-daviqin-persistent",
+        "build_version": "v2.5-daviqin-audio-sync",
         "supported_personas": list(PERSONAS.keys())
     }
 
@@ -1199,6 +1199,40 @@ def health_check():
 def get_last_error():
     """Melihat log error render terakhir untuk diagnosa teknis."""
     return last_render_error
+
+
+@app.get("/api/test_daviqin")
+def test_daviqin():
+    """Menjalankan uji coba render 1 detik DaviqinVid1 di server untuk diagnosa teknis."""
+    from core.remotion_renderer import render_remotion_video
+    try:
+        test_out = os.path.join(TEMP_DIR, "test_daviqin_api.mp4")
+        res = render_remotion_video(
+            hook_text="BEDAH KONSEP DAVIQIN",
+            points=["Analisis fenomena", "Paper Cutout Collage"],
+            cta_text="",
+            output_mp4_path=test_out,
+            persona_key="arye",
+            aspect_ratio="portrait",
+            brand_badge="✂️ DAVIQIN • EDITORIAL PAPER CUTOUT",
+            duration_sec=1,
+            style_variant="daviqinvid1",
+            timeout=120
+        )
+        return {
+            "status": "ok",
+            "message": "Render DaviqinVid1 berhasil!",
+            "file": res,
+            "exists": os.path.exists(res),
+            "size": os.path.getsize(res) if os.path.exists(res) else 0
+        }
+    except Exception as e:
+        import traceback
+        return {
+            "status": "error",
+            "error": str(e),
+            "traceback": traceback.format_exc()
+        }
 
 
 @app.get("/api/test_remotion")
