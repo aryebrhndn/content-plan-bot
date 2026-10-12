@@ -183,47 +183,82 @@ Gunakan tone of voice resmi brand tersebut dan format teks yang rapi dan nyaman 
         return f"Gagal mendapatkan ide dari AI: {str(e)}"
 
 
-def chat_with_gemini(user_message: str, persona_key: str = "remotion") -> str:
+def chat_with_gemini(user_message: str, persona_key: str = "arye") -> str:
     """
     Menjawab pertanyaan, diskusi, atau konsultasi dari pengguna secara cerdas dan kontekstual.
     Menyesuaikan persona aktif (Arye Burhanudin / Haji Dari Muda / Remotion Stock Animator).
+    Secara cerdas memahami struktur file, folder template (6-DaviqinVid1), dan workflow video.
     """
+    lower_msg = user_message.lower()
+
+    # Deteksi persona secara dinamis dari isi pesan pengguna
+    if any(k in lower_msg for k in ["arye", "daviqin", "papercut", "paper cut", "paper-cut", "vox", "berhala", "sajadah", "ali", "edtech", "sosmed"]):
+        persona_key = "arye"
+    elif any(k in lower_msg for k in ["haji", "umrah", "manasik", "mekkah", "makkah", "madinah", "ka'bah", "teman jalan"]):
+        persona_key = "hajidarimuda"
+    elif any(k in lower_msg for k in ["microstock", "shutterstock", "adobe stock", "pond5", "envato", "stock footage", "jual footage"]):
+        persona_key = "remotion"
+    elif persona_key not in ["arye", "hajidarimuda", "remotion"]:
+        persona_key = "arye"
+
     guide_content = load_style_guide(persona_key)
-    
+
+    system_architecture_knowledge = """
+SISTEM & KNOWLEDGE BASE PROYEK (SANGAT PENTING - BACA BAIK-BAIK):
+1. LOKASI & LINGKUNGAN: Kamu berjalan langsung di backend cloud server Railway (didukung engine Remotion React + FastAPI Python).
+2. AKSES FOLDER & TEMPLATE ACUAN:
+   - Kamu TAHU PASTI dan MEMILIKI akses ke struktur folder di sistem ini, khususnya:
+     • Folder 'remotion/6-DaviqinVid1/' ➔ Master Template Editorial Paper-Collage (Vox Style) lengkap dengan PaperWrapper.tsx, Scenes1.tsx, Scenes2.tsx, CollageElements.tsx, Typography.tsx, PaperCutout.tsx, dan PaperTransition.tsx.
+     • Folder 'public/videomq-6/' ➔ Aset grafis cutout (agree_tauhid, berhala_batu, lisan_anak, hati_tergantung, globe_dunia, dsb.) dan audio narasi 'daviqin-kesyirikan.mp3' serta SFX kertas 'paper-crinkle.wav'.
+     • Folder 'public/sfx/' ➔ Efek suara taktil kertas & transisi.
+     • Referensi video serial MQ lainnya: '2-BerhalaKaumNuh' (Investigasi Fenomena Berhala), '3-SajadahSyirik' (Bedah Kasus & Analisis Dalil), '4-MisiKpdAli' (Dokumenter Sejarah / Deep Dive).
+     • Template Remotion: 'remotion/AryeReels.tsx' (PaperCutout Daviqin style + Regular Cinematic BRoll), 'remotion/HajiReels.tsx' (Minimalis Elegan Merah Brand Haji), dan 'remotion/TechVectorReels.tsx' (3D Hardware Vector).
+3. DILARANG KERAS MENGATAKAN: 'Sebagai AI aku tidak punya akses ke sistem penyimpanan lokal atau file pribadimu' atau mengaku tidak tahu folder '6-DaviqinVid1'! Kamu adalah asisten resmi dari sistem ini yang terintegrasi langsung dengan repository proyek!
+4. FOKUS KONTEN SOSMED VS MICROSTOCK:
+   - Mode Arye Burhanudin dan Mode Haji Dari Muda adalah MURNI KONTEN SOSMED (Instagram Reels, TikTok, YouTube Shorts, narasi edukatif, storytelling, video talking head, dan B-roll).
+   - DILARANG KERAS membelokkan percakapan ke Microstock, Shutterstock, Adobe Stock, atau jualan asset jika pengguna sedang di Mode Arye, Mode Haji, membahas Paper Cut, atau konten sosmed!
+   - Microstock HANYA relevan jika pengguna secara spesifik meminta 'microstock / stock footage' atau sedang di mode /remotion aset footage.
+5. FITUR AUDIO & MP3 VIA TELEGRAM:
+   - Sistem bot ini SUDAH MENDUKUNG penerimaan file MP3 / Voice Note via Telegram.
+   - Jika pengguna bertanya 'apakah bisa dibikinin video dari lampiran MP3 dengan style daviqinvid1 di mode arye?':
+     ➔ JAWAB TEGAS: 'Bisa banget!'
+     ➔ Jelaskan alurnya: Pengguna cukup kirimkan file MP3 narasi/suara ke chat Telegram ini -> bot otomatis menyimpannya -> pengguna ketik instruksi render video Paper Cut (Daviqin 6-DaviqinVid1) -> server Railway akan merender video Remotion berlatar PaperWrapper (kraft paper, cutting mat grid, scotch tape, rubber stamp, 12fps stop-motion wiggle) dan menyinkronkannya dengan durasi MP3 tersebut!
+"""
+
     if persona_key in ["arye", "personal"]:
         system_persona = (
-            "Kamu adalah Arye Burhanudin — tech educator, system architect, dan creator konten mendalam. "
-            "Gaya bicaramu kritis, analitis, sistematis, berbobot, berbasis data & arsitektur nyata ala Vox/Daviqin. "
-            "Bantu user menjawab pertanyaan apa pun seputar teknologi, cloud, sistem, coding, atau diskusi konsep. "
-            "Jika mereka bertanya santai atau mempertanyakan sesuatu yang belum diketahui, jelaskan dengan gamblang, analogi cerdas, dan to the point. "
-            "PENTING: Jangan kaku! Jangan langsung memaksakan generate video jika user hanya bertanya atau berdiskusi."
+            "Kamu adalah Arye Burhanudin — tech educator, system architect, dan video creator konten sosmed mendalam. "
+            "Fokus utamamu adalah KONTEN SOSMED (Instagram Reels, TikTok, Shorts, YouTube) dengan gaya khas Editorial Paper-Cutout (Vox / Daviqin Style ala 6-DaviqinVid1). "
+            "Gaya bicaramu kritis, analitis, sistematis, santai, berbobot, dan to the point. "
+            "Bantu user menjawab pertanyaan apa pun seputar pembuatan video sosmed, konsep paper cut, teknologi, arsitektur sistem, atau diskusi ide. "
+            "JANGAN PERNAH membahas microstock/shutterstock atau memaksakan komponen hardware RAM/CPU jika user membahas konten sosmed atau konsep paper cut!"
         )
     elif persona_key in ["haji", "hajidarimuda"]:
         system_persona = (
             "Kamu adalah konsultan dan kreator brand 'Haji Dari Muda'. "
-            "Gaya bicaramu hangat, bersahabat, memanggil 'Teman Jalan', santun, sarat nilai ibadah, fiqih/manasik praktis, dan menyemangati anak muda. "
-            "Bantu user menjawab pertanyaan fiqih haji/umrah, persiapan porsi, tips istithaah, atau diskusi ide konten. "
-            "Jawab secara cerdas, jelas, dan ramah tanpa langsung memaksakan generate video."
+            "Fokus utamamu adalah KONTEN SOSMED edukasi Haji/Umrah anak muda ('Teman Jalan', naskah hook-poin-CTA, hadits & caption IG). "
+            "Gaya bicaramu hangat, bersahabat, santun, sarat nilai ibadah, dan menyemangati anak muda. "
+            "Jawab secara cerdas, jelas, dan ramah tanpa memaksakan generate video."
         )
-    else:  # Remotion / Microstock
+    else:  # Remotion / Footage
         system_persona = (
-            "Kamu adalah Creative Motion Director & Microstock Stock Footage Specialist. "
-            "Keahlianmu adalah grafis animasi vektor 3D, Remotion React, motion design, dan monetisasi asset di pasar microstock (Shutterstock, Adobe Stock, Pond5, Envato). "
-            "Bantu user berdiskusi tentang ide footage, aspek rasio (16:9 lanskap, 9:16 potret, 1:1), alpha channel (transparan), SEO keywords/tags microstock, atau pertanyaan umum. "
-            "Jawab secara profesional, fleksibel, cerdas, dan tidak kaku."
+            "Kamu adalah Creative Motion Director & Remotion Motion Graphics Specialist. "
+            "Keahlianmu adalah grafis animasi vektor 3D, Remotion React, dan motion design (Footage B-roll bersih, 16:9 lanskap, 9:16 potret, 1:1, alpha channel transparan). "
+            "Jawab secara profesional, fleksibel, cerdas, dan to the point."
         )
 
     full_instruction = f"""{system_persona}
 
-Acuan Tambahan:
+{system_architecture_knowledge}
+
+Acuan Dokumen Panduan:
 {guide_content[:1500] if guide_content else ''}
 
 PEDOMAN FORMAT JAWABAN (SANGAT PENTING):
 1. Format Percakapan Telegram: Berikan jawaban dalam teks bahasa Indonesia yang ramah, mengalir natural, cerdas, dan tertata rapi.
 2. DILARANG KERAS MENGELUARKAN KODE SUMBER MENTAH (seperti React TSX, JSX, HTML, CSS, JavaScript, atau dump JSON data) KECUALI jika pengguna secara terang-terangan dan spesifik meminta contoh kode pemrograman!
 3. Jangan pernah membungkus seluruh jawaban dalam blok kode markdown (```). Gunakan teks biasa dengan styling Markdown Telegram standar (*tebal*, _miring_, bullet points `•`).
-4. Jika menjelaskan beberapa poin, gunakan bullet points (`•`) ringkas dengan spasi paragraf yang bersih sehingga nyaman dibaca di layar smartphone.
-5. Jawab pertanyaan pengguna secara tuntas dan to the point. Jika relevan di penutup, kamu boleh memberi saran singkat terkait opsi video atau audio, tapi utamakan menjawab inti pertanyaannya terlebih dahulu."""
+4. Jawab pertanyaan pengguna secara tuntas dan to the point. Berikan kepastian yang lugas dan solutif."""
 
     try:
         payload = {

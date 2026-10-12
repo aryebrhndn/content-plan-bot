@@ -52,8 +52,28 @@ logger = logging.getLogger(__name__)
 app = FastAPI(title="Multi-Channel Automated Reels Generator & Laptop Monitor")
 TELEGRAM_API_URL = f"https://api.telegram.org/bot{TELEGRAM_BOT_TOKEN}"
 
-# Penyimpanan mode aktif per user (In-memory)
-user_active_modes: Dict[int, str] = {}
+MODES_FILE = os.path.join(TEMP_DIR, "user_modes.json")
+
+def load_user_modes() -> Dict[int, str]:
+    if os.path.exists(MODES_FILE):
+        try:
+            with open(MODES_FILE, "r", encoding="utf-8") as f:
+                data = json.load(f)
+                return {int(k): v for k, v in data.items()}
+        except Exception as e:
+            logger.warning(f"Gagal load user_modes: {e}")
+    return {}
+
+def save_user_modes(modes: Dict[int, str]):
+    try:
+        os.makedirs(TEMP_DIR, exist_ok=True)
+        with open(MODES_FILE, "w", encoding="utf-8") as f:
+            json.dump({str(k): v for k, v in modes.items()}, f)
+    except Exception as e:
+        logger.warning(f"Gagal save user_modes: {e}")
+
+# Penyimpanan mode aktif per user (Persistent via JSON file, default Arye)
+user_active_modes: Dict[int, str] = load_user_modes()
 
 # Penyimpanan data telemetri laptop terakhir
 laptop_telemetry_data: Dict = {}
@@ -875,6 +895,7 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
             target_mode = parts[1].strip().lower()
             if target_mode in PERSONAS:
                 user_active_modes[user_id] = target_mode
+                save_user_modes(user_active_modes)
                 await send_telegram_message(
                     chat_id,
                     f"✅ Mode berhasil diubah ke: *{PERSONAS[target_mode]['name']}*\n"
@@ -885,10 +906,10 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
 
         # Tampilkan opsi persona
         modes_text = (
-            f"1️⃣ `/mode haji` ➔ *Haji Dari Muda*\n"
-            f"   • Konten edukasi Haji/Umrah (Teman Jalan, Hadits/Doa, Naskah + Caption IG)\n\n"
-            f"2️⃣ `/mode arye` ➔ *Arye Burhanudin*\n"
-            f"   • Deep dive edutech & sistem (Vox Cutout, arsitektur, naskah H-C-B-C)\n\n"
+            f"1️⃣ `/mode arye` ➔ *Arye Burhanudin* (Default)\n"
+            f"   • Konten sosmed EdTech, sistem, & Paper Cutout Daviqin (6-DaviqinVid1, Vox style, naskah H-C-B-C)\n\n"
+            f"2️⃣ `/mode haji` ➔ *Haji Dari Muda*\n"
+            f"   • Konten sosmed edukasi Haji/Umrah (Teman Jalan, Hadits/Doa, Naskah + Caption IG)\n\n"
             f"3️⃣ `/mode remotion` ➔ *Remotion Motion Graphics*\n"
             f"   • Animasi grafis/hardware (Footage B-Roll bersih / Infografis, 16:9 Lanskap, 1:1, 9:16)\n\n"
             f"4️⃣ `/mode veo` ➔ *Google Veo 3.1 AI Video*\n"
@@ -898,12 +919,23 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
             chat_id,
             f"🔄 *Pilih Mode Kerja Bot:*\n\n"
             f"{modes_text}\n\n"
-            f"💡 _Contoh: Ketik `/mode remotion` untuk fokus bikin footage animasi grafis._"
+            f"💡 _Contoh: Ketik `/mode arye` untuk fokus bikin konten sosmed Paper Cutout Daviqin._"
         )
         return
 
-    # Ambil mode aktif pengguna (default: remotion agar tidak memaksakan brand haji)
-    user_curr_mode = user_active_modes.get(user_id, "remotion")
+    # Deteksi peralihan mode secara cerdas dari kalimat pengguna
+    if any(k in lower_text for k in ["mode arye", "ini mode arye", "ke mode arye", "ganti mode arye", "arye burhanudin", "daviqin", "papercut", "paper cut", "paper-cut"]):
+        user_active_modes[user_id] = "arye"
+        save_user_modes(user_active_modes)
+    elif any(k in lower_text for k in ["mode haji", "ini mode haji", "ke mode haji", "ganti mode haji", "haji darimuda", "hajidarimuda"]):
+        user_active_modes[user_id] = "hajidarimuda"
+        save_user_modes(user_active_modes)
+    elif any(k in lower_text for k in ["mode remotion", "ke mode remotion", "mode footage", "mode vector"]):
+        user_active_modes[user_id] = "remotion"
+        save_user_modes(user_active_modes)
+
+    # Ambil mode aktif pengguna (default: arye untuk konten sosmed edukasi & papercut)
+    user_curr_mode = user_active_modes.get(user_id, "arye")
     if user_curr_mode in ["haji", "hajidarimuda"]:
         default_persona = "hajidarimuda"
     elif user_curr_mode in ["arye", "personal"]:
@@ -1014,9 +1046,16 @@ async def handle_user_command_or_message(chat_id: int, user_id: int, text: str, 
     # 4. CHAT CERDAS & TANYA JAWAB DENGAN GEMINI AI (Fallback Cerdas, Tidak Kaku!)
     # Jika user mempertanyakan sesuatu yang tidak diketahui, urgent, diskusi ide/konsep, atau ngobrol:
     # Jawab secara cerdas dan kontekstual, JANGAN langsung auto-render video!
-    await send_telegram_message(chat_id, "🤔 *Sedang menganalisis & menyusun jawaban...*")
-    from core.gemini_client import chat_with_gemini
-    ai_answer = chat_with_gemini(text_clean, persona_key=user_curr_mode)
+    # Deteksi persona cerdas berdasarkan teks pesan dan mode aktif
+    detected_persona = user_curr_mode
+    if any(k in lower_text for k in ["arye", "daviqin", "papercut", "paper cut", "paper-cut", "vox", "berhala", "sajadah", "ali", "sosmed"]):
+        detected_persona = "arye"
+    elif any(k in lower_text for k in ["haji", "umrah", "manasik", "mekkah", "teman jalan"]):
+        detected_persona = "hajidarimuda"
+    elif any(k in lower_text for k in ["microstock", "shutterstock", "adobe stock", "stock footage"]):
+        detected_persona = "remotion"
+
+    ai_answer = chat_with_gemini(text_clean, persona_key=detected_persona)
     await send_telegram_message(chat_id, ai_answer)
     return
 
@@ -1030,7 +1069,7 @@ def health_check():
     return {
         "status": "ok",
         "app": "Multi-Channel Automated Reels Generator",
-        "build_version": "v2.3-prebundled",
+        "build_version": "v2.4-daviqin-persistent",
         "supported_personas": list(PERSONAS.keys())
     }
 

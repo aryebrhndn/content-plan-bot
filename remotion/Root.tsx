@@ -3,6 +3,7 @@ import { Composition } from 'remotion';
 import { HajiReels, HajiReelsProps } from './HajiReels';
 import { AryeReels, AryeReelsProps } from './AryeReels';
 import { TechVectorReels, TechVectorReelsProps } from './TechVectorReels';
+import { DaviqinVid1 } from './6-DaviqinVid1';
 
 const defaultHajiProps: HajiReelsProps = {
   hook_header: '5 TIPS PERSIAPAN HAJI DARI MUDA',
@@ -132,6 +133,15 @@ export const RemotionRoot: React.FC = () => {
         width={1080}
         height={1080}
         defaultProps={defaultTechProps}
+      />
+      {/* 10. DaviqinVid1 - Editorial Paper Cutout Original (105s @ 60fps) */}
+      <Composition
+        id="DaviqinVid1"
+        component={DaviqinVid1}
+        durationInFrames={6300}
+        fps={60}
+        width={1080}
+        height={1920}
       />
     </>
   );

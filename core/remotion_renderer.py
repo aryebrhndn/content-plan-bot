@@ -41,20 +41,35 @@ def render_remotion_video(
     - landscape (16:9 - 1920x1080) untuk YouTube/Desktop/Footage
     - square (1:1 - 1080x1080) untuk Instagram Feed/LinkedIn
     """
-    if persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
+    if style_variant in ["daviqinvid1", "daviqin_master"] or persona_key in ["daviqinvid1"]:
+        comp_id = "DaviqinVid1"
+    elif persona_key in ["tech_vector", "tech", "hardware", "vector", "3d", "remotion"]:
         base_comp = "TechVectorReels"
+        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
+        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
+            comp_id = f"{base_comp}Landscape"
+        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
+            comp_id = f"{base_comp}Square"
+        else:
+            comp_id = base_comp
     elif persona_key in ["arye", "personal"]:
         base_comp = "AryeReels"
+        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
+        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
+            comp_id = f"{base_comp}Landscape"
+        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
+            comp_id = f"{base_comp}Square"
+        else:
+            comp_id = base_comp
     else:
         base_comp = "HajiReels"
-    
-    aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
-    if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
-        comp_id = f"{base_comp}Landscape"
-    elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
-        comp_id = f"{base_comp}Square"
-    else:
-        comp_id = base_comp
+        aspect_ratio_clean = (aspect_ratio or "portrait").lower().strip()
+        if aspect_ratio_clean in ["landscape", "lanskap", "16:9", "horizontal", "lebar", "tidur", "youtube", "desktop"]:
+            comp_id = f"{base_comp}Landscape"
+        elif aspect_ratio_clean in ["square", "1:1", "kotak", "persegi", "feed"]:
+            comp_id = f"{base_comp}Square"
+        else:
+            comp_id = base_comp
 
     task_id = uuid.uuid4().hex[:8]
     temp_dir = os.path.dirname(os.path.abspath(output_mp4_path))
